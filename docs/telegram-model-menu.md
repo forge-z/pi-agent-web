@@ -1,0 +1,21 @@
+# Menu de modelos Telegram / Telegram model menu
+
+## PT-BR
+
+`/model` abre um teclado inline nativo, sem precisar digitar IDs. O cabeçalho mostra o modelo e o provedor atuais. Escolha um provedor configurado pelo nome, com a quantidade de modelos do catálogo; depois escolha o modelo. O item atual tem **✓**. Provedores e modelos são paginados em grupos de oito, com **Anterior**, **Próxima**, **Voltar aos provedores** e **Cancelar**. A navegação tenta atualizar a mesma mensagem. Se a edição falhar, uma nova mensagem no mesmo destino oferece o menu atualizado; os botões anteriores ficam inválidos.
+
+A disponibilidade vem do `checkAuth` do Pi AI, incluindo configuração por ambiente, e do catálogo filtrado já usado em Configurações. O menu não faz login, não configura provedores, não renova OAuth e não exibe credenciais. Um provedor configurado sem modelos aparece com zero; sua página explica a ausência. O catálogo observado não garante acesso da conta a todos os modelos.
+
+A escolha altera **somente a conversa selecionada nesse chat/tópico**. Preserva ID, histórico, grants, tópico, demais conversas e origem/destino dos crons. O esforço anterior é ajustado por `clampThinkingLevel` para um valor compatível. A configuração usa o mesmo `Settings.saveConversation` e armazenamento persistente da web; sobrevive a reinícios com o volume mantido. O padrão global só muda por escolha explícita em **Configurações → Novas conversas** ou `/default PROVIDER MODELO ESFORÇO`. `/model ID` continua disponível para trocar por texto dentro do provedor atual; `/thinking` mantém seu funcionamento.
+
+Os botões são opacos, de uso único, vinculados ao dono, bot, chat, tópico, conversa e versão do menu e da autorização. O menu expira após 15 minutos. Navegar invalida a página anterior; cancelar ou selecionar encerra o menu. Mudanças de seleção/modelo, revogação de grants/conexão (mesmo se concedidos novamente), tópico observado fechado ou catálogo removido impedem reaplicar escolhas antigas. A gravação revalida a autorização e a escolha original sob o lock das configurações. Conversas em execução ou em intervenção humana CUA não mudam de modelo. Depois de falha ou interrupção, abra `/model` novamente; um botão já reivindicado não repete a gravação. A limpeza permanente de uma conversa, quando já autorizada pelos fluxos existentes, remove sua metadata de menu; este recurso não inicia exclusões ou purgas.
+
+## English
+
+`/model` opens a native inline keyboard: current model/provider, configured providers with catalog counts, then models. **✓** marks the current choice. Both lists use eight items per page, with previous/next, back to providers and cancel controls. Navigation edits the original message where possible; an edit failure queues a replacement in the same destination and invalidates earlier buttons.
+
+Provider availability reuses Pi AI's configuration check, including environment credentials, and the existing filtered catalog. There is no login, provider setup, OAuth refresh or credential output. Empty catalogs have an explicit empty state. A configured catalog entry does not guarantee account entitlement.
+
+A model choice changes only the selected conversation in that chat/topic, through the existing persistent settings path. Compatible thinking effort is retained or clamped. Conversation IDs, transcripts, topics, grants, other conversations and frozen cron destinations remain unchanged across restart. Global defaults still require an explicit choice in Settings or `/default PROVIDER MODEL EFFORT`. Typed `/model ID` remains a current-provider shortcut.
+
+Opaque, single-use controls bind to owner, bot, chat, topic, conversation, menu and authorization versions. Menus expire after 15 minutes. Navigation, cancellation, changed selections/settings, revoked access (including subsequent regrant) and removed catalog entries invalidate old choices. Authorization and original settings are rechecked under the settings lock before saving. Busy conversations and human CUA handoffs retain their guards. Reopen `/model` after an interrupted selection; a claimed control never replays a potentially applied setting. Existing permanent conversation cleanup also removes its menu metadata; this feature initiates no deletions or purges.

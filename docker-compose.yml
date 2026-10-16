@@ -1,0 +1,52 @@
+services:
+  pi-agent:
+    build:
+      context: .
+      args:
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+    restart: unless-stopped
+    init: true
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATA_DIR: /app/data
+      APP_MODE: ${APP_MODE:-demo}
+      # Bootstrap da primeira instalação; o padrão salvo no volume tem precedência.
+      # First-install bootstrap only; the saved default in the volume takes precedence.
+      MODEL_ID: ${MODEL_ID:-gpt-6.1-sol}
+      # Defina a origem HTTPS pública nas variáveis do Coolify, sem caminho/barra final.
+      APP_ORIGIN: ${APP_ORIGIN:?}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # true somente atrás de um proxy que acrescenta X-Forwarded-For (Coolify/Traefik).
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      # Senha de runtime: o build não precisa dela. A aplicação recusa senha vazia/curta.
+      WEB_PASSWORD: ${WEB_PASSWORD:-}
+      MCP_CONFIG_FILE: ${MCP_CONFIG_FILE:-}
+      # Telegram: configure token e usuário na interface; os dados persistem no volume.
+    volumes:
+      - pi_agent_data:/app/data
+      # Se usar MCP, monte uma configuração revisada e somente leitura:
+      # - ./config/mcp.json:/app/config/mcp.json:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    stop_grace_period: 45s
+
+volumes:
+  pi_agent_data:

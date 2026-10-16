@@ -1,0 +1,1837 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { Runtime } from "../src/runtime.js";
+import { createAppServer } from "../src/server.js";
+import {
+  TelegramConnection,
+  TelegramApiError,
+  TelegramBotApi,
+  type TelegramApi,
+  type TelegramConnectionOptions,
+} from "../src/telegram-connection.js";
+import { hash, SqlCredentials } from "../src/store.js";
+import type { TelegramUpdate } from "../src/telegram.js";
+import type { ToolGateway } from "../src/mcp.js";
+import { telegramCommandCatalog } from "../src/telegram-commands.js";
+
+const token = "123456:fake_local_test_token";
+const dm = (
+  id: number,
+  text: string,
+  user = 42,
+  type = "private",
+  chat = user,
+): TelegramUpdate => ({
+  update_id: id,
+  message: {
+    message_id: id,
+    text,
+    from: { id: user },
+    chat: { id: chat, type },
+  },
+});
+async function until(predicate: () => boolean, label = "condition") {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    if (Date.now() > deadline) assert.fail(`Timed out: ${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+class FakeTelegram implements TelegramApi {
+  calls: { method: string; payload: Record<string, unknown>; at: number }[] =
+    [];
+  updates: TelegramUpdate[] = [];
+  sent: { chat: unknown; text: unknown }[] = [];
+  webhook = "";
+  botId = 123456;
+  pollError: TelegramApiError | undefined;
+  getMeError: TelegramApiError | undefined;
+  deleteUncertain = false;
+  sendUncertain = false;
+  sendRefusals: TelegramApiError[] = [];
+  pending: (() => void) | undefined;
+  activePolls = 0;
+  maxActivePolls = 0;
+  menus = new Map<string, unknown[]>([
+    ["default", [{ command: "outside", description: "Outro serviço" }]],
+  ]);
+  menuWriteUncertain = false;
+  menuWriteNotApplied = false;
+  menuReadError = false;
+  push(...updates: TelegramUpdate[]) {
+    this.updates.push(...updates);
+    this.pending?.();
+  }
+  async call(
+    method: Parameters<TelegramApi["call"]>[0],
+    payload: Record<string, unknown> = {},
+    signal?: AbortSignal,
+  ) {
+    this.calls.push({ method, payload, at: Date.now() });
+    if (method === "getMe") {
+      if (this.getMeError) throw this.getMeError;
+      return {
+        id: this.botId,
+        is_bot: true,
+        username: "test_pi_bot",
+        first_name: "Pi test",
+      };
+    }
+    if (method === "answerCallbackQuery") return true;
+    if (method === "getWebhookInfo") return { url: this.webhook };
+    if (method === "deleteWebhook") {
+      this.webhook = "";
+      if (this.deleteUncertain)
+        throw new Error(`fake secret network failure ${token}`);
+      return true;
+    }
+    if (method === "sendMessage") {
+      const refusal = this.sendRefusals.shift();
+      if (refusal) throw refusal;
+      this.sent.push({ chat: payload.chat_id, text: payload.text });
+      if (this.sendUncertain) throw new Error(`response lost ${token}`);
+      return { message_id: this.sent.length };
+    }
+    if (method === "editForumTopic" || method === "editMessageText")
+      return true;
+    if (method === "getMyCommands" || method === "setMyCommands") {
+      const scope = payload.scope as { type: string; chat_id: number };
+      assert.equal(scope.type, "chat");
+      const key = `${scope.chat_id}:${payload.language_code ?? ""}`;
+      if (method === "getMyCommands") {
+        if (this.menuReadError)
+          throw new Error(`private menu failure ${token}`);
+        return structuredClone(this.menus.get(key) ?? []);
+      }
+      if (!this.menuWriteNotApplied)
+        this.menus.set(key, structuredClone(payload.commands as unknown[]));
+      if (this.menuWriteUncertain || this.menuWriteNotApplied)
+        throw new Error(`menu response lost ${token}`);
+      return true;
+    }
+    if (this.pollError) {
+      const error = this.pollError;
+      this.pollError = undefined;
+      throw error;
+    }
+    const batch = () =>
+      this.updates.filter(
+        (update) => update.update_id >= Number(payload.offset ?? 0),
+      );
+    if (!payload.timeout || batch().length) return batch();
+    this.activePolls++;
+    this.maxActivePolls = Math.max(this.activePolls, this.maxActivePolls);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const done = () => {
+          signal?.removeEventListener("abort", abort);
+          this.pending = undefined;
+          resolve();
+        };
+        const abort = () => {
+          this.pending = undefined;
+          reject(signal?.reason);
+        };
+        if (signal?.aborted) return abort();
+        signal?.addEventListener("abort", abort, { once: true });
+        this.pending = done;
+      });
+      return batch();
+    } finally {
+      this.activePolls--;
+    }
+  }
+}
+
+test("polling corrects only the implicit native /new topic name using editForumTopic", async () => {
+  const f = await fixture();
+  try {
+    const anchor = await f.app.create("Synthetic anchor");
+    await f.connect(anchor);
+    const message = dm(5000, "Synthetic pairing message");
+    f.fake.push(message);
+    await until(() => f.offset() === "5001");
+    f.fake.push({
+      update_id: 5001,
+      message: {
+        message_id: 11,
+        date: 5001,
+        message_thread_id: 11,
+        from: { id: 42 },
+        chat: { id: 42, type: "private" },
+        forum_topic_created: {
+          name: "/new@test_pi_bot Férias",
+          is_name_implicit: true,
+        },
+      },
+    });
+    await until(() => f.offset() === "5002");
+    assert.deepEqual(
+      f.fake.calls
+        .filter((c) => c.method === "editForumTopic")
+        .map((c) => c.payload),
+      [{ chat_id: "42", message_thread_id: 11, name: "Férias" }],
+    );
+    assert.equal(
+      f.fake.calls.some((c) => c.method === "createForumTopic"),
+      false,
+    );
+  } finally {
+    await f.close();
+  }
+});
+async function fixture(
+  legacy?: TelegramConnectionOptions["legacy"],
+  gateway: ToolGateway = { call: async () => ({}) },
+) {
+  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-polling-"));
+  let app = await Runtime.open({
+    dir,
+    mode: "demo",
+    gateway,
+  });
+  const fake = new FakeTelegram();
+  let manager = new TelegramConnection(app, {
+    apiFactory: () => fake,
+    legacy,
+    retryBaseMs: 10,
+  });
+  return {
+    dir,
+    fake,
+    get app() {
+      return app;
+    },
+    get manager() {
+      return manager;
+    },
+    connect: (conversationId: string, extra: Record<string, unknown> = {}) =>
+      manager.connect({
+        requestId: randomUUID(),
+        token,
+        userId: "42",
+        conversationId,
+        ...extra,
+      }),
+    offset: () =>
+      app.store.get<{ value: string }>(
+        "SELECT value FROM meta WHERE key=?",
+        `telegram:offset:${fake.botId}`,
+      )?.value,
+    async restart() {
+      await manager.close();
+      await app.close();
+      app = await Runtime.open({
+        dir,
+        mode: "demo",
+        gateway,
+      });
+      manager = new TelegramConnection(app, {
+        apiFactory: () => fake,
+        legacy,
+        retryBaseMs: 10,
+      });
+      await manager.restore();
+    },
+    async close() {
+      await manager.close();
+      await app.close();
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+test("archive revokes an unpaired Telegram setup across restore until an explicit new link", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create("Antes");
+    await f.connect(id);
+    assert.equal(f.manager.snapshot().conversationTitle, "Antes");
+    await f.app.renameConversation(id, "Depois");
+    assert.equal(f.manager.snapshot().conversationTitle, "Depois");
+    await f.app.deleteConversation(id);
+    assert.equal(f.manager.snapshot().conversationId, null);
+    f.app.restoreConversation(id);
+    f.fake.push(dm(9001, "Não reconectar automaticamente"));
+    await until(() => f.offset() === "9002");
+    assert.equal(f.app.store.all("SELECT * FROM telegram").length, 0);
+    assert.equal(f.app.store.all("SELECT * FROM requests").length, 0);
+    await f.connect(id);
+    f.fake.push(dm(9002, "Vínculo explicitamente novo"));
+    await until(() => f.offset() === "9003");
+    assert.equal(f.app.store.all("SELECT * FROM telegram").length, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("malformed topic updates cannot bootstrap the private binding", async () => {
+  const f = await fixture();
+  try {
+    const anchor = await f.app.create("Unpaired anchor");
+    await f.connect(anchor);
+    const malformed = dm(9898, "invalid topic");
+    malformed.message!.message_thread_id = 0;
+    const missing = dm(9899, "missing topic id");
+    missing.message!.is_topic_message = true;
+    f.fake.push(malformed, missing);
+    await until(() => f.offset() === "9900");
+    assert.equal(f.app.store.all("SELECT * FROM telegram").length, 0);
+    assert.equal(f.app.store.all("SELECT * FROM requests").length, 0);
+    assert.equal(f.manager.snapshot().awaitingFirstMessage, true);
+  } finally {
+    await f.close();
+  }
+});
+
+test("managed private polling sends replies, commands and rejections to their native topics", async () => {
+  const f = await fixture();
+  const topic = (id: number, text: string, thread: number) => {
+    const u = dm(id, text);
+    u.message!.message_thread_id = thread;
+    u.message!.is_topic_message = true;
+    return u;
+  };
+  try {
+    const anchor = await f.app.create("Preserved anchor");
+    await f.connect(anchor);
+    f.fake.push(
+      topic(9901, "/new Native A", 11),
+      topic(9902, "/new Native B", 22),
+    );
+    await until(() => f.offset() === "9903");
+    const a = f.app.telegramChats.selected({
+      chat: "42",
+      user: "42",
+      messageThreadId: 11,
+    })!;
+    const b = f.app.telegramChats.selected({
+      chat: "42",
+      user: "42",
+      messageThreadId: 22,
+    })!;
+    assert.notEqual(a, b);
+    f.fake.push(
+      topic(9903, "synthetic input", 11),
+      topic(9904, `/agents ${a}`, 22),
+    );
+    await until(() => f.offset() === "9905");
+    await (await f.app.conversation(a)).waitForIdle(context);
+    await until(() =>
+      f.fake.calls.some(
+        (c) =>
+          c.method === "sendMessage" &&
+          c.payload.message_thread_id === 11 &&
+          String(c.payload.text).includes("synthetic input"),
+      ),
+    );
+    await until(() =>
+      f.fake.calls.some(
+        (c) =>
+          c.method === "sendMessage" &&
+          c.payload.message_thread_id === 22 &&
+          String(c.payload.text).includes("não autorizado"),
+      ),
+    );
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE conversationId=?", anchor)
+        .length,
+      0,
+    );
+    assert.equal(
+      f.app.store.get<{ state: string }>(
+        "SELECT state FROM telegram_poll_receipts WHERE id=9904",
+      )?.state,
+      "rejected",
+    );
+    await f.restart();
+    assert.equal(
+      f.app.telegramChats.selected({
+        chat: "42",
+        user: "42",
+        messageThreadId: 11,
+      }),
+      a,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("revoked unpaired setup never bootstraps its old grant for invalid or valid link commands", async () => {
+  const f = await fixture();
+  try {
+    const old = await f.app.create("Sem primeiro DM");
+    await f.connect(old);
+    await f.app.deleteConversation(old);
+    f.fake.push(dm(9301, `/link ${"f".repeat(32)}`));
+    await until(() => f.offset() === "9302");
+    assert.equal(f.app.store.all("SELECT * FROM telegram").length, 0);
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 0);
+    const fresh = await f.app.create("Precisa nova conexão explícita");
+    f.fake.push(dm(9302, `/link ${f.app.store.link(fresh)}`));
+    await until(() => f.offset() === "9303");
+    assert.equal(f.app.store.all("SELECT * FROM telegram").length, 0);
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("polling preserves busy updates and offset, then retries exactly once after settings unlock", async (t) => {
+  for (const target of ["selected-message", "selected-new", "selected-start"]) {
+    await t.test(target, async () => {
+      const f = await fixture();
+      let release: (() => void) | undefined;
+      let settings: Promise<void> | undefined;
+      try {
+        const anchor = await f.app.create("Web anchor");
+        await f.connect(anchor);
+        f.fake.push(dm(9400, "/new Inicial"));
+        await until(() => f.offset() === "9401");
+        const selected = f.app.store.get<{ conversationId: string }>(
+          "SELECT conversationId FROM telegram_chat_selection WHERE chat='42' AND user='42'",
+        )!.conversationId;
+        const busyId = selected;
+        let entered!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        settings = f.app.withConversationSettings(busyId, async () => {
+          entered();
+          await gate;
+        });
+        await ready;
+        let attempts = 0;
+        const available = f.app.assertConversationAvailable.bind(f.app);
+        f.app.assertConversationAvailable = (id) => {
+          if (id === busyId) attempts++;
+          available(id);
+        };
+        const text =
+          target === "selected-new"
+            ? "/new Retry"
+            : target === "selected-start"
+              ? "/start"
+              : "Mensagem preservada no polling";
+        f.fake.push(dm(9401, text));
+        await until(() => attempts > 0);
+        assert.equal(f.offset(), "9401");
+        assert.equal(
+          f.app.store.get("SELECT 1 FROM telegram_poll_receipts WHERE id=9401"),
+          undefined,
+        );
+        assert.equal(
+          f.app.store.get(
+            "SELECT 1 FROM meta WHERE key='telegram:update:9401'",
+          ),
+          undefined,
+        );
+        assert.equal(
+          f.app.store.all(
+            "SELECT * FROM deliveries WHERE id LIKE 'telegram:control:9401:%'",
+          ).length,
+          0,
+        );
+        await until(
+          () => attempts >= 2,
+          "poll retry while settings remain busy",
+        );
+        assert.ok(release);
+        release();
+        release = undefined;
+        await settings;
+        settings = undefined;
+        await until(() => f.offset() === "9402", "retry accepted after unlock");
+        assert.equal(
+          f.app.store.all(
+            "SELECT * FROM telegram_poll_receipts WHERE id=9401 AND state='accepted'",
+          ).length,
+          1,
+        );
+        if (target.endsWith("message")) {
+          assert.equal(
+            f.app.store.all(
+              "SELECT * FROM requests WHERE requestId='telegram:9401'",
+            ).length,
+            1,
+          );
+          await (await f.app.conversation(selected)).waitForIdle(context);
+        }
+        if (target === "selected-new")
+          assert.equal(
+            f.app.listConversations().filter((c) => c.title === "Retry").length,
+            1,
+          );
+        assert.equal(
+          f.app.store.all(
+            "SELECT * FROM deliveries WHERE id LIKE 'telegram:control:9401:%'",
+          ).length,
+          0,
+        );
+        await f.restart();
+        assert.equal(f.offset(), "9402");
+      } finally {
+        release?.();
+        await settings;
+        await f.close();
+      }
+    });
+  }
+});
+
+test("a selected conversation that becomes busy during admission awaits does not terminally reject its Telegram input", async () => {
+  const f = await fixture();
+  let release: (() => void) | undefined;
+  let settings: Promise<void> | undefined;
+  try {
+    const anchor = await f.app.create("Web anchor");
+    await f.connect(anchor);
+    f.fake.push(dm(9500, "/new Selecionada"));
+    await until(() => f.offset() === "9501");
+    const selected = f.app.store.get<{ conversationId: string }>(
+      "SELECT conversationId FROM telegram_chat_selection WHERE chat='42' AND user='42'",
+    )!.conversationId;
+    const drain = Reflect.get(f.app, "drainDeferredOutcomes");
+    Reflect.set(f.app, "drainDeferredOutcomes", async () => {
+      Reflect.set(f.app, "drainDeferredOutcomes", drain);
+      let entered!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      settings = f.app.withConversationSettings(selected, async () => {
+        entered();
+        await gate;
+      });
+      await ready;
+    });
+    let busyObserved = false;
+    const available = f.app.assertConversationAvailable.bind(f.app);
+    f.app.assertConversationAvailable = (id) => {
+      try {
+        available(id);
+      } catch (error) {
+        if (id === selected) busyObserved = true;
+        throw error;
+      }
+    };
+    f.fake.push(dm(9501, "Preservar na corrida de admissão"));
+    await until(() => busyObserved);
+    assert.equal(f.offset(), "9501");
+    assert.equal(
+      f.app.store.get("SELECT 1 FROM telegram_poll_receipts WHERE id=9501"),
+      undefined,
+    );
+    assert.equal(
+      f.app.store.get("SELECT 1 FROM requests WHERE requestId='telegram:9501'"),
+      undefined,
+    );
+    assert.ok(release);
+    release();
+    release = undefined;
+    await settings;
+    settings = undefined;
+    await until(() => f.offset() === "9502");
+    assert.equal(
+      f.app.store.all(
+        "SELECT * FROM telegram_poll_receipts WHERE id=9501 AND state='accepted'",
+      ).length,
+      1,
+    );
+    assert.equal(
+      f.app.store.all(
+        "SELECT * FROM requests WHERE requestId='telegram:9501' AND conversationId=?",
+        selected,
+      ).length,
+      1,
+    );
+    await (await f.app.conversation(selected)).waitForIdle(context);
+    await f.restart();
+    assert.equal(f.offset(), "9502");
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE requestId='telegram:9501'")
+        .length,
+      1,
+    );
+  } finally {
+    release?.();
+    await settings;
+    await f.close();
+  }
+});
+
+test("configured Telegram owner receives new/relink guidance after deleting every conversation and can explicitly link a fresh web anchor", async () => {
+  const f = await fixture();
+  try {
+    const anchor = await f.app.create("Web anchor");
+    await f.connect(anchor);
+    f.fake.push(dm(9201, "/new Trabalho"));
+    await until(() => f.offset() === "9202");
+    const selected = f.app.store.get<{ conversationId: string }>(
+      "SELECT conversationId FROM telegram_chat_selection WHERE chat='42' AND user='42'",
+    )?.conversationId;
+    assert.ok(selected);
+    await f.app.deleteConversation(selected);
+    await f.app.deleteConversation(anchor);
+    const before = f.fake.sent.length;
+    f.fake.push(dm(9202, "/new"));
+    await until(() => f.offset() === "9203");
+    await until(() => f.fake.sent.length > before);
+    assert.match(String(f.fake.sent.at(-1)?.text), /Vincular Telegram/);
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 0);
+    await f.restart();
+    f.fake.push(dm(9203, "E agora?"));
+    await until(() => f.offset() === "9204");
+    assert.match(String(f.fake.sent.at(-1)?.text), /Vincular Telegram/);
+    const fresh = await f.app.create("Novo vínculo explícito");
+    f.fake.push(dm(9204, `/link ${f.app.store.link(fresh)}`));
+    await until(() => f.offset() === "9205");
+    f.fake.push(dm(9205, "/new Depois do vínculo"));
+    await until(() => f.offset() === "9206");
+    assert.equal(
+      f.app.store.get<{ conversationId: string }>(
+        "SELECT conversationId FROM telegram WHERE chat='42'",
+      )?.conversationId,
+      fresh,
+    );
+    const newSelected = f.app.store.get<{ conversationId: string }>(
+      "SELECT conversationId FROM telegram_chat_selection WHERE chat='42' AND user='42'",
+    )?.conversationId;
+    assert.ok(newSelected && newSelected !== selected);
+  } finally {
+    await f.close();
+  }
+});
+
+test("archive suppresses old history while guiding the bound owner and preserving explicit new links", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create("Vinculada");
+    const other = await f.app.create("Outra");
+    await f.connect(id);
+    f.fake.push(dm(9101, "/help"));
+    await until(() => f.offset() === "9102");
+    await until(
+      () =>
+        f.app.store.get<{ state: string }>(
+          "SELECT state FROM deliveries WHERE id='command:telegram:9101:0'",
+        )?.state === "sent",
+    );
+    await f.app.deleteConversation(id);
+    const before = f.app.store.all("SELECT * FROM deliveries").length;
+    f.fake.push(dm(9102, "/help"));
+    await until(() => f.offset() === "9103");
+    assert.equal(
+      f.app.store.all("SELECT * FROM deliveries").length,
+      before + 1,
+    );
+    assert.match(
+      f.app.store.get<{ text: string }>(
+        "SELECT text FROM deliveries WHERE id='telegram:control:9102:0'",
+      )!.text,
+      /Vincular Telegram/,
+    );
+    f.app.restoreConversation(id);
+    f.fake.push(dm(9103, "Ainda não vincular automaticamente"));
+    await until(() => f.offset() === "9104");
+    assert.equal(
+      f.app.store.all("SELECT * FROM deliveries").length,
+      before + 2,
+    );
+    assert.equal(f.app.store.all("SELECT * FROM requests").length, 0);
+    const code = f.app.store.link(other);
+    f.fake.push(dm(9104, `/link ${code}`));
+    await until(() => f.offset() === "9105");
+    assert.equal(
+      f.app.store.get<{ conversationId: string }>(
+        "SELECT conversationId FROM telegram WHERE chat='42'",
+      )?.conversationId,
+      other,
+    );
+    f.fake.push(dm(9105, "/help"));
+    await until(() => f.offset() === "9106");
+    assert.ok(
+      f.app.store.get(
+        "SELECT 1 FROM command_receipts WHERE conversationId=? AND requestId='telegram:9105'",
+        other,
+      ),
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("Telegram setup status is authenticated and available without environment credentials", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-connection-"));
+  const app = await Runtime.open({
+    dir,
+    mode: "demo",
+    gateway: { call: async () => ({}) },
+  });
+  const origin = "http://127.0.0.1:3000";
+  const web = createAppServer(app, {
+    password: "telegram-test-password",
+    origin,
+    secureCookie: false,
+    publicDir: resolve("public"),
+  });
+  await new Promise<void>((done) => web.server.listen(0, "127.0.0.1", done));
+  const address = web.server.address();
+  assert.ok(address && typeof address === "object");
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    assert.equal((await fetch(`${base}/api/telegram`)).status, 401);
+    const login = await fetch(`${base}/api/login`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify({ password: "telegram-test-password" }),
+    });
+    const cookie = login.headers.get("set-cookie")!.split(";")[0];
+    const status = await fetch(`${base}/api/telegram`, { headers: { cookie } });
+    assert.equal(status.status, 200);
+    const snapshot = (await status.json()) as {
+      state: string;
+      hasToken: boolean;
+    };
+    assert.equal(snapshot.state, "unconfigured");
+    assert.equal(snapshot.hasToken, false);
+    assert.equal((await fetch(`${base}/healthz`)).status, 200);
+  } finally {
+    await web.close();
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("private polling binds only the explicit user and separates Telegram context; duplicates and restart preserve the offset", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create("Web + Telegram");
+    f.fake.push(
+      dm(1, "/start", 7),
+      dm(2, "/start", 42, "group"),
+      dm(3, "/start"),
+      dm(4, "Olá pelo Telegram"),
+    );
+    assert.equal((await f.connect(id)).state, "connected");
+    await until(() => f.offset() === "5", "durable offset");
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 2);
+    assert.equal(
+      f.app.store.get<{ conversationId: string }>(
+        "SELECT * FROM telegram WHERE chat='42'",
+      )?.conversationId,
+      id,
+    );
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE requestId='telegram:4'")
+        .length,
+      1,
+    );
+    await (await f.app.conversation(id)).waitForIdle(context);
+    await until(
+      () =>
+        f.fake.sent.some((value) =>
+          String(value.text).includes("Olá pelo Telegram"),
+        ),
+      "shared reply",
+    );
+    assert.equal(f.manager.snapshot().conversationTitle, "Web + Telegram");
+    assert.equal(
+      f.fake.calls.filter((call) => call.method === "deleteWebhook").length,
+      0,
+    );
+    assert.equal(
+      f.fake.calls.find((call) => call.method === "getUpdates")?.payload
+        .timeout,
+      0,
+    );
+    await f.restart();
+    await until(
+      () =>
+        f.fake.calls.some(
+          (call) => call.method === "getUpdates" && call.payload.offset === 5,
+        ),
+      "restored offset",
+    );
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE requestId='telegram:4'")
+        .length,
+      1,
+    );
+    assert.equal(f.fake.maxActivePolls, 1);
+    assert.deepEqual(
+      f.fake.calls.filter((call) => call.method === "getUpdates").at(-1)
+        ?.payload.allowed_updates,
+      ["message", "callback_query"],
+    );
+    assert.doesNotMatch(
+      JSON.stringify(f.manager.snapshot()),
+      new RegExp(token),
+    );
+    assert.ok(
+      f.app.store.get(
+        "SELECT * FROM credentials WHERE provider='telegram:bot'",
+      ),
+    );
+    assert.deepEqual(await new SqlCredentials(f.app.store).list(), []);
+    assert.ok(
+      f.app.store
+        .all<{ value: string }>("SELECT value FROM meta")
+        .every((row) => !row.value.includes(token)),
+    );
+    assert.equal((await stat(join(f.dir, "app.sqlite"))).mode & 0o777, 0o600);
+    assert.equal((await stat(f.dir)).mode & 0o777, 0o700);
+  } finally {
+    await f.close();
+  }
+});
+
+test("webhook switching verifies bot and full URL version; duplicate connect and disconnect never repeat deletion or reactivate", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.webhook = "https://example.invalid/private/token-path?secret=hidden";
+    const conflict = await f.connect(id);
+    assert.equal(conflict.state, "webhook_conflict");
+    assert.equal(conflict.webhookUrl, "https://example.invalid");
+    assert.ok(!JSON.stringify(conflict).includes("token-path"));
+    assert.equal(
+      f.fake.calls.filter((call) => call.method === "deleteWebhook").length,
+      0,
+    );
+    assert.equal(
+      (
+        await f.connect(id, {
+          replaceWebhook: true,
+          expectedBotId: 999,
+          expectedWebhook: conflict.webhookVersion,
+        })
+      ).state,
+      "webhook_conflict",
+    );
+    f.fake.webhook = "https://example.invalid/changed";
+    assert.equal(
+      (
+        await f.connect(id, {
+          replaceWebhook: true,
+          expectedBotId: f.fake.botId,
+          expectedWebhook: conflict.webhookVersion,
+        })
+      ).state,
+      "webhook_conflict",
+    );
+    const request = {
+      requestId: randomUUID(),
+      token,
+      userId: "42",
+      conversationId: id,
+      replaceWebhook: true,
+      expectedBotId: f.fake.botId,
+      expectedWebhook: hash(f.fake.webhook),
+    };
+    const duplicate = await Promise.all([
+      f.manager.connect(request),
+      f.manager.connect(request),
+    ]);
+    assert.ok(duplicate.every((snapshot) => snapshot.state === "connected"));
+    assert.equal(
+      f.fake.calls.filter((call) => call.method === "deleteWebhook").length,
+      1,
+    );
+    const deleteCall = f.fake.calls.find(
+      (call) => call.method === "deleteWebhook",
+    );
+    assert.equal(deleteCall?.payload.drop_pending_updates, false);
+    await assert.rejects(
+      f.manager.connect({ ...request, userId: "43" }),
+      /requestId/,
+    );
+    await f.manager.disconnect({ requestId: randomUUID() });
+    assert.equal((await f.manager.connect(request)).state, "disconnected");
+    await f.restart();
+    assert.equal(f.manager.snapshot().state, "disconnected");
+    assert.equal((await f.manager.connect(request)).state, "disconnected");
+    assert.equal(
+      f.fake.calls.filter((call) => call.method === "deleteWebhook").length,
+      1,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("unknown webhook deletion is durably uncertain and never blindly repeated", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.webhook = "https://example.invalid/hook";
+    f.fake.deleteUncertain = true;
+    const conflict = await f.connect(id);
+    const request = {
+      requestId: randomUUID(),
+      token,
+      userId: "42",
+      conversationId: id,
+      replaceWebhook: true,
+      expectedBotId: f.fake.botId,
+      expectedWebhook: conflict.webhookVersion,
+    };
+    const result = await f.manager.connect(request);
+    assert.equal(result.state, "blocked");
+    assert.match(result.error!, /incerto/);
+    assert.ok(!JSON.stringify(result).includes(token));
+    await f.manager.connect(request);
+    await f.restart();
+    assert.equal(f.manager.snapshot().state, "blocked");
+    assert.match(f.manager.snapshot().error!, /incerto/);
+    await f.manager.connect(request);
+    assert.equal(
+      f.fake.calls.filter((call) => call.method === "deleteWebhook").length,
+      1,
+    );
+    assert.equal(
+      f.app.store
+        .all<{ value: string }>(
+          "SELECT value FROM meta WHERE key LIKE 'telegram:setup:%'",
+        )
+        .some((row) => JSON.parse(row.value).state === "uncertain"),
+      true,
+    );
+    // A new explicit Connect may observe that the uncertain delete actually succeeded.
+    assert.equal((await f.connect(id)).state, "connected");
+    assert.equal(
+      f.fake.calls.filter((call) => call.method === "deleteWebhook").length,
+      1,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("admission survives checkpoint storage failure and restart without losing later updates or duplicating requests", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.app.store.db.exec(
+      "CREATE TRIGGER fail_poll_receipt BEFORE INSERT ON telegram_poll_receipts BEGIN SELECT RAISE(ABORT,'mock checkpoint failure'); END",
+    );
+    f.fake.push(dm(10, "Mensagem durável"), dm(11, "Próxima mensagem"));
+    await f.connect(id);
+    await until(
+      () => f.manager.snapshot().state === "retrying",
+      "checkpoint error",
+    );
+    assert.equal(f.offset(), undefined);
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE requestId='telegram:10'")
+        .length,
+      1,
+    );
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE requestId='telegram:11'")
+        .length,
+      0,
+    );
+    await f.manager.close();
+    f.app.store.db.exec("DROP TRIGGER fail_poll_receipt");
+    await f.restart();
+    await until(() => f.offset() === "12", "restart replay");
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE requestId='telegram:10'")
+        .length,
+      1,
+    );
+    assert.equal(
+      f.app.store.all("SELECT * FROM requests WHERE requestId='telegram:11'")
+        .length,
+      1,
+    );
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 2);
+  } finally {
+    await f.close();
+  }
+});
+
+test("invalid commands are terminal receipts; DM binding and grants roll back on storage failure", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.app.store.db.exec(
+      "CREATE TRIGGER fail_grant BEFORE INSERT ON telegram_grants BEGIN SELECT RAISE(ABORT,'mock grant failure'); END",
+    );
+    f.fake.push(
+      dm(1, "/link bad"),
+      dm(2, "/approve aaaaaaaaaaaaaaaaaaaaaaaa"),
+      dm(3, "/help"),
+    );
+    await f.connect(id);
+    await until(() => f.manager.snapshot().state === "retrying");
+    assert.equal(f.app.store.all("SELECT * FROM telegram").length, 0);
+    assert.equal(f.offset(), undefined);
+    f.app.store.db.exec("DROP TRIGGER fail_grant");
+    await until(() => f.offset() === "4");
+    assert.equal(
+      f.app.store.all(
+        "SELECT * FROM telegram_poll_receipts WHERE state='rejected'",
+      ).length,
+      2,
+    );
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 1);
+    assert.equal(f.app.store.all("SELECT * FROM requests").length, 0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("migration is paused, hints are narrow and legacy credentials are read only on explicit Connect", async () => {
+  let reads = 0;
+  const f = await fixture({
+    hasToken: true,
+    userIds: ["42"],
+    readToken: () => {
+      reads++;
+      return token;
+    },
+  });
+  try {
+    const old = await f.app.create("Legacy"),
+      target = await f.app.create("Selected");
+    f.app.store.run("INSERT INTO telegram VALUES ('42',?,'42')", old);
+    f.app.store.run("INSERT INTO telegram_grants VALUES ('42','42',?)", old);
+    await f.manager.restore();
+    assert.equal(f.manager.snapshot().state, "migration_required");
+    assert.equal(reads, 0);
+    assert.equal(f.fake.calls.length, 0);
+    assert.equal((await f.connect(target, { token: "" })).state, "connected");
+    assert.equal(reads, 1);
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 1);
+    f.fake.push(dm(1, "/start"));
+    await until(() => f.offset() === "2");
+    assert.equal(
+      f.app.store.get<{ conversationId: string }>(
+        "SELECT conversationId FROM telegram WHERE chat='42'",
+      )?.conversationId,
+      target,
+    );
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 2);
+    await f.manager.disconnect({ requestId: randomUUID() });
+    await f.restart();
+    assert.equal(reads, 1);
+    assert.equal(f.manager.snapshot().state, "disconnected");
+  } finally {
+    await f.close();
+  }
+});
+
+test("same-bot token rotation is allowed; another bot is blocked and old recipients are not sent queued deliveries", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    await f.connect(id);
+    f.fake.push(dm(1, "/start"));
+    await until(() => f.offset() === "2");
+    f.app.store.run(
+      "INSERT INTO deliveries(id,chat,text) VALUES ('old-user-pending','42','old private response')",
+    );
+    await f.connect(id, { token: "123456:rotated_fake_token", userId: "43" });
+    f.fake.push(dm(2, "/start", 43));
+    await until(() => f.offset() === "3");
+    assert.equal(
+      f.fake.sent.some((row) => row.text === "old private response"),
+      false,
+    );
+    assert.equal(
+      f.app.store.get<{ state: string }>(
+        "SELECT state FROM deliveries WHERE id='old-user-pending'",
+      )?.state,
+      "pending",
+    );
+    f.fake.botId = 999;
+    assert.equal(
+      (await f.connect(id, { token: "999:another_fake_bot" })).state,
+      "blocked",
+    );
+    assert.match(f.manager.snapshot().error!, /outro bot/);
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 2);
+  } finally {
+    await f.close();
+  }
+});
+
+test("poll conflict blocks without deletes, transient failures retry and rate-limit waiting is abortable", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.pollError = new TelegramApiError("unavailable");
+    assert.equal((await f.connect(id)).state, "retrying");
+    await until(() => f.manager.snapshot().state === "connected");
+    await f.manager.disconnect({ requestId: randomUUID() });
+    f.fake.pollError = new TelegramApiError("conflict");
+    assert.equal((await f.connect(id)).state, "blocked");
+    assert.match(f.manager.snapshot().error!, /Outro processo/);
+    assert.equal(
+      f.fake.calls.filter((call) => call.method === "deleteWebhook").length,
+      0,
+    );
+    f.fake.pollError = new TelegramApiError("rate_limit", 120);
+    assert.equal((await f.connect(id)).state, "retrying");
+    const start = Date.now();
+    await f.manager.disconnect({ requestId: randomUUID() });
+    assert.ok(Date.now() - start < 1000);
+    assert.equal(f.fake.activePolls, 0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("uncertain outbound messages are never resent after restart", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.sendUncertain = true;
+    f.fake.push(dm(1, "/start"));
+    await f.connect(id);
+    await until(
+      () =>
+        f.app.store.all("SELECT * FROM deliveries WHERE state='uncertain'")
+          .length === 1,
+    );
+    assert.equal(f.fake.sent.length, 1);
+    await f.restart();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(f.fake.sent.length, 1);
+    assert.ok(!JSON.stringify(f.manager.snapshot()).includes(token));
+  } finally {
+    await f.close();
+  }
+});
+
+test("disconnect cancels an in-flight approval, persists uncertainty and never re-executes its effect", async () => {
+  let writes = 0;
+  const f = await fixture(undefined, {
+    call: async (_server, _tool, _args, kind, signal) => {
+      if (kind === "read") return {};
+      writes++;
+      return new Promise((_, reject) => {
+        if (signal?.aborted) reject(signal.reason);
+        else
+          signal?.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+      });
+    },
+  });
+  try {
+    const id = await f.app.create();
+    await f.app.actions.read(id, "mock", "read", {});
+    const action = f.app.actions.propose(id, 1, "mock", "write", {});
+    f.fake.push(dm(1, `/approve ${action.id}`));
+    await f.connect(id);
+    await until(() => writes === 1);
+    const start = Date.now();
+    await f.manager.disconnect({ requestId: randomUUID() });
+    assert.ok(Date.now() - start < 1000);
+    assert.equal(f.app.store.actions(id)[0].state, "uncertain");
+    await f.restart();
+    await f.connect(id);
+    f.fake.push(dm(2, `/approve ${action.id}`));
+    await until(() => f.offset() === "3");
+    assert.equal(writes, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("persistent storage errors back off exponentially without advancing the offset", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.app.store.db.exec(
+      "CREATE TRIGGER fail_poll_always BEFORE INSERT ON telegram_poll_receipts BEGIN SELECT RAISE(ABORT,'mock persist failure'); END",
+    );
+    f.fake.push(dm(1, "/help"));
+    await f.connect(id);
+    await until(
+      () =>
+        f.fake.calls.filter((call) => call.method === "getUpdates").length >= 4,
+    );
+    await f.manager.disconnect({ requestId: randomUUID() });
+    const polls = f.fake.calls.filter((call) => call.method === "getUpdates");
+    assert.ok(polls[2].at - polls[1].at >= 15);
+    assert.ok(polls[3].at - polls[2].at >= 35);
+    assert.equal(f.offset(), undefined);
+    assert.equal(f.app.store.all("SELECT * FROM telegram_grants").length, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("connect and disconnect require web session and exact origin; legacy webhook stays disabled and token errors leave web healthy", async () => {
+  const f = await fixture();
+  const origin = "http://127.0.0.1:3000";
+  const web = createAppServer(f.app, {
+    password: "fake-web-password",
+    origin,
+    secureCookie: false,
+    telegramConnection: f.manager,
+    publicDir: resolve("public"),
+  });
+  await new Promise<void>((done) => web.server.listen(0, "127.0.0.1", done));
+  const address = web.server.address();
+  assert.ok(address && typeof address === "object");
+  const base = `http://127.0.0.1:${address.port}`;
+  const post = (path: string, data: unknown, cookie = "", source = origin) =>
+    fetch(base + path, {
+      method: "POST",
+      headers: { origin: source, cookie, "content-type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  try {
+    const id = await f.app.create();
+    const input = {
+      requestId: randomUUID(),
+      token,
+      userId: "42",
+      conversationId: id,
+    };
+    assert.equal((await post("/api/telegram/connect", input)).status, 401);
+    const login = await post("/api/login", { password: "fake-web-password" });
+    const cookie = login.headers.get("set-cookie")!.split(";")[0];
+    assert.equal(
+      (
+        await post(
+          "/api/telegram/connect",
+          input,
+          cookie,
+          "https://evil.invalid",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post(
+          "/api/telegram/disconnect",
+          { requestId: randomUUID() },
+          cookie,
+          "https://evil.invalid",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (await post("/api/telegram/webhook", dm(1, "/start"), cookie)).status,
+      403,
+    );
+    assert.equal(
+      (
+        await post(
+          "/api/telegram/connect",
+          { ...input, userId: "42,43" },
+          cookie,
+        )
+      ).status,
+      400,
+    );
+    f.fake.getMeError = new TelegramApiError("invalid_token");
+    const invalid = await post("/api/telegram/connect", input, cookie);
+    assert.equal(invalid.status, 200);
+    assert.equal((await invalid.json()).state, "blocked");
+    assert.equal((await fetch(base + "/healthz")).status, 200);
+    assert.equal((await fetch(base + "/telegram.js")).status, 200);
+    f.fake.getMeError = undefined;
+    const connected = await post(
+      "/api/telegram/connect",
+      { ...input, requestId: randomUUID() },
+      cookie,
+    );
+    assert.equal((await connected.json()).state, "connected");
+    assert.equal(
+      (
+        await post(
+          "/api/telegram/disconnect",
+          { requestId: randomUUID() },
+          cookie,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(f.manager.snapshot().state, "disconnected");
+  } finally {
+    await web.close();
+    await f.close();
+  }
+});
+
+test("main starts with incomplete old Telegram environment and an unreadable legacy secret without making Telegram requests", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-main-"));
+  const reservation = createServer();
+  await new Promise<void>((done) => reservation.listen(0, "127.0.0.1", done));
+  const address = reservation.address();
+  assert.ok(address && typeof address === "object");
+  const port = address.port;
+  await new Promise<void>((done) => reservation.close(() => done()));
+  const origin = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ["--import", "tsx", "src/main.ts"], {
+    cwd: resolve("."),
+    env: {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      APP_MODE: "demo",
+      APP_ORIGIN: origin,
+      DATA_DIR: dir,
+      PORT: String(port),
+      WEB_PASSWORD: "main-fake-password",
+      TELEGRAM_BOT_TOKEN_FILE: join(dir, "missing-secret"),
+      TELEGRAM_ALLOWED_USERS: "42",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let logs = "";
+  child.stdout.on("data", (data) => {
+    logs += data;
+  });
+  child.stderr.on("data", (data) => {
+    logs += data;
+  });
+  try {
+    const deadline = Date.now() + 5000;
+    let healthy = false;
+    while (Date.now() < deadline && !healthy) {
+      try {
+        healthy = (await fetch(origin + "/healthz")).status === 200;
+      } catch {
+        /* startup */
+      }
+      if (!healthy) await new Promise((done) => setTimeout(done, 25));
+    }
+    assert.ok(healthy, logs);
+    const login = await fetch(origin + "/api/login", {
+      method: "POST",
+      headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify({ password: "main-fake-password" }),
+    });
+    const cookie = login.headers.get("set-cookie")!.split(";")[0];
+    const response = await fetch(origin + "/api/telegram", {
+      headers: { cookie },
+    });
+    const state = await response.json();
+    assert.equal(state.state, "migration_required");
+    assert.equal(state.hasToken, true);
+    assert.equal(state.userId, "42");
+    assert.equal(state.bot, null);
+    assert.equal(state.lastSuccessAt, null);
+    assert.doesNotMatch(logs, /ENOENT|api\.telegram\.org|Token Telegram/);
+  } finally {
+    const exited = new Promise<void>((done) =>
+      child.once("exit", () => done()),
+    );
+    child.kill("SIGTERM");
+    await exited;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("native command menu uses only the confirmed private chat, preserves global commands and survives restart without writes", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    await f.connect(id);
+    assert.equal(f.manager.snapshot().commandMenu.state, "waiting");
+    f.fake.push(dm(1, "/help", 7), dm(2, "/help", 42, "group"));
+    await until(() => f.offset() === "3");
+    assert.equal(
+      f.fake.calls.filter((c) => /MyCommands/.test(c.method)).length,
+      0,
+    );
+    const incoming = dm(3, "/help");
+    incoming.message!.from!.language_code = "pt-br";
+    f.fake.push(incoming);
+    await until(() => f.manager.snapshot().commandMenu.state === "ready");
+    const writes = f.fake.calls.filter((c) => c.method === "setMyCommands");
+    assert.equal(writes.length, 2);
+    for (const call of writes) {
+      assert.deepEqual(call.payload.scope, { type: "chat", chat_id: 42 });
+      assert.deepEqual(call.payload.commands, telegramCommandCatalog);
+    }
+    assert.deepEqual(
+      writes.map((c) => c.payload.language_code),
+      ["", "pt"],
+    );
+    assert.deepEqual(
+      telegramCommandCatalog.map((c) => c.command),
+      [
+        "new",
+        "cua",
+        "controls",
+        "default",
+        "topics",
+        "agents",
+        "model",
+        "thinking",
+        "compact",
+        "tasks",
+        "crons",
+        "stop",
+        "help",
+      ],
+    );
+    assert.deepEqual(f.fake.menus.get("default"), [
+      { command: "outside", description: "Outro serviço" },
+    ]);
+    await f.restart();
+    await until(() => f.manager.snapshot().commandMenu.state === "ready");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "setMyCommands").length,
+      2,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("a foreign private-chat menu is preserved before any language is modified", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    const foreign = [{ command: "outside", description: "Outro serviço" }];
+    f.fake.menus.set("42:pt", foreign);
+    f.fake.push(dm(1, "/help"));
+    await f.connect(id);
+    await until(() => f.manager.snapshot().commandMenu.state === "conflict");
+    assert.equal(f.manager.snapshot().state, "connected");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "setMyCommands").length,
+      0,
+    );
+    assert.deepEqual(f.fake.menus.get("42:pt"), foreign);
+    await f.restart();
+    await until(() => f.manager.snapshot().commandMenu.state === "conflict");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "setMyCommands").length,
+      0,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("an unknown command-menu write is verified after restart and never blindly repeated", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.menuWriteUncertain = true;
+    f.fake.push(dm(1, "/help"));
+    await f.connect(id);
+    await until(() => f.manager.snapshot().commandMenu.state === "uncertain");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "setMyCommands").length,
+      1,
+    );
+    f.fake.menuWriteUncertain = false;
+    await f.restart();
+    await until(() => f.manager.snapshot().commandMenu.state === "ready");
+    const writes = f.fake.calls.filter((c) => c.method === "setMyCommands");
+    assert.equal(writes.length, 2);
+    assert.deepEqual(
+      writes.map((c) => c.payload.language_code),
+      ["", "pt"],
+    );
+    assert.doesNotMatch(
+      JSON.stringify(f.manager.snapshot()),
+      new RegExp(token),
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("a menu write not applied remains uncertain across restart until a fresh explicit connection", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.menuWriteNotApplied = true;
+    f.fake.push(dm(1, "/help"));
+    await f.connect(id);
+    await until(() => f.manager.snapshot().commandMenu.state === "uncertain");
+    await f.restart();
+    await until(() => f.manager.snapshot().commandMenu.state === "uncertain");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "setMyCommands").length,
+      1,
+    );
+    f.fake.menuWriteNotApplied = false;
+    f.fake.push(dm(2, "/help"));
+    await f.connect(id);
+    await until(() => f.manager.snapshot().commandMenu.state === "ready");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "setMyCommands").length,
+      3,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("menu lookup failure does not block message admission or expose upstream errors", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.menuReadError = true;
+    f.fake.push(dm(1, "/help"));
+    await f.connect(id);
+    await until(() => f.manager.snapshot().commandMenu.state === "retrying");
+    assert.equal(f.manager.snapshot().state, "connected");
+    assert.equal(f.offset(), "2");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "setMyCommands").length,
+      0,
+    );
+    assert.doesNotMatch(
+      JSON.stringify(f.manager.snapshot()),
+      /private menu failure|fake_local_test_token/,
+    );
+    f.fake.menuReadError = false;
+    await f.restart();
+    await until(() => f.manager.snapshot().commandMenu.state === "ready");
+  } finally {
+    await f.close();
+  }
+});
+
+test("polling sends new ledger chunks as HTML and leaves older plain payloads intact", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.app.create();
+    f.fake.push(dm(1, "/help"));
+    await f.connect(id);
+    await until(() => f.manager.snapshot().commandMenu.state === "ready");
+    f.app.store.queueTelegram("html-test", "42", "**Olá** & `x < y`\n\n- item");
+    f.app.store.run(
+      "INSERT INTO deliveries(id,chat,text) VALUES ('plain-test','42','**old**')",
+    );
+    f.fake.push(dm(2, "/help"));
+    await until(() =>
+      f.fake.calls.some(
+        (c) => c.method === "sendMessage" && c.payload.text === "**old**",
+      ),
+    );
+    const formatted = f.fake.calls.find(
+      (c) =>
+        c.method === "sendMessage" &&
+        String(c.payload.text).includes("<b>Olá</b>"),
+    )!;
+    assert.equal(formatted.payload.parse_mode, "HTML");
+    assert.match(String(formatted.payload.text), /<code>x &lt; y<\/code>/);
+    assert.match(String(formatted.payload.text), /• item/);
+    const old = f.fake.calls.find(
+      (c) => c.method === "sendMessage" && c.payload.text === "**old**",
+    )!;
+    assert.equal(old.payload.parse_mode, undefined);
+    const count = f.fake.calls.filter((c) => c.method === "sendMessage").length;
+    await f.restart();
+    await until(() => f.manager.snapshot().commandMenu.state === "ready");
+    assert.equal(
+      f.fake.calls.filter((c) => c.method === "sendMessage").length,
+      count,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("a CUA-held conversation rejects its Telegram update with guidance instead of stalling later updates", async () => {
+  const f = await fixture();
+  try {
+    const anchor = await f.app.create("Web anchor");
+    await f.connect(anchor);
+    f.fake.push(dm(9500, "/new Inicial"));
+    await until(() => f.offset() === "9501");
+    const selected = f.app.store.get<{ conversationId: string }>(
+      "SELECT conversationId FROM telegram_chat_selection WHERE chat='42' AND user='42'",
+    )!.conversationId;
+    const held = f.app.isConversationHeld.bind(f.app);
+    f.app.isConversationHeld = (id) => id === selected || held(id);
+    f.fake.push(dm(9501, "Mensagem durante a pausa"));
+    await until(() => f.offset() === "9502", "held update acknowledged");
+    assert.ok(
+      f.app.store.get(
+        "SELECT 1 FROM telegram_poll_receipts WHERE id=9501 AND state='rejected'",
+      ),
+    );
+    await until(
+      () => f.fake.sent.some((m) => String(m.text).includes("pausada")),
+      "hold guidance sent",
+    );
+    assert.equal(
+      f.app.store.get("SELECT 1 FROM requests WHERE requestId='telegram:9501'"),
+      undefined,
+    );
+    f.app.isConversationHeld = held;
+    f.fake.push(dm(9502, "Mensagem após devolver o controle"));
+    await until(() => f.offset() === "9503", "later update accepted");
+    assert.ok(
+      f.app.store.get(
+        "SELECT 1 FROM requests WHERE requestId='telegram:9502' AND conversationId=?",
+        selected,
+      ),
+    );
+    await (await f.app.conversation(selected)).waitForIdle(context);
+  } finally {
+    await f.close();
+  }
+});
+
+test("Telegram refusals are definite: 429 waits and resends in order, other 4xx fail without becoming uncertain", async () => {
+  const f = await fixture();
+  try {
+    const anchor = await f.app.create("Web anchor");
+    await f.connect(anchor);
+    f.fake.push(dm(9600, "/help"));
+    await until(() => f.fake.sent.length === 1, "first reply");
+    const delivery = (id: number) =>
+      f.app.store.get<{ state: string; result: string }>(
+        "SELECT state,result FROM deliveries WHERE id LIKE ?",
+        `command:telegram:${id}:%`,
+      );
+    f.fake.sendRefusals.push(new TelegramApiError("rate_limit", 1, 429));
+    const limitedAt = Date.now();
+    f.fake.push(dm(9601, "/help"));
+    await until(() => f.offset() === "9602", "rate-limited update accepted");
+    await until(() => delivery(9601)?.state === "sent", "sent after waiting");
+    assert.ok(Date.now() - limitedAt >= 900);
+    assert.equal(f.fake.sent.length, 2);
+    f.fake.sendRefusals.push(new TelegramApiError("unavailable", 0, 400));
+    f.fake.push(dm(9602, "/help"));
+    await until(() => delivery(9602)?.state === "failed", "refused delivery");
+    assert.match(delivery(9602)!.result, /código 400/);
+    assert.equal(f.fake.sent.length, 2);
+    f.fake.push(dm(9603, "/help"));
+    await until(() => f.fake.sent.length === 3, "later reply still sent");
+  } finally {
+    await f.close();
+  }
+});
+
+test("only a 4xx answer from Telegram itself marks a call as refused", async (t) => {
+  const answers: (() => Response)[] = [
+    () =>
+      Response.json(
+        { ok: false, error_code: 400, description: `bad ${token}` },
+        { status: 400 },
+      ),
+    () =>
+      Response.json(
+        { ok: false, error_code: 429, parameters: { retry_after: 7 } },
+        { status: 429 },
+      ),
+    () => Response.json({ ok: false, error_code: 500 }, { status: 500 }),
+    () => new Response("<html>bad gateway</html>", { status: 502 }),
+  ];
+  t.mock.method(globalThis, "fetch", async () => answers.shift()!());
+  const api = new TelegramBotApi(token);
+  const failure = async () => {
+    try {
+      await api.call("sendMessage", { chat_id: 1, text: "x" });
+    } catch (error) {
+      assert.ok(error instanceof TelegramApiError);
+      assert.doesNotMatch(error.message, /fake_local_test_token/);
+      return error;
+    }
+    assert.fail("call should fail");
+  };
+  assert.equal((await failure()).refusedCode, 400);
+  const limited = await failure();
+  assert.equal(limited.refusedCode, 429);
+  assert.equal(limited.retryAfter, 7);
+  assert.equal((await failure()).refusedCode, undefined);
+  assert.equal((await failure()).refusedCode, undefined);
+});
+
+test("managed /model uses a native keyboard and edits its original message through Bot API", async () => {
+  const f = await fixture();
+  try {
+    const anchor = await f.app.create("Web anchor");
+    await f.connect(anchor);
+    const defaults = f.app.settings.defaults();
+    f.fake.push(dm(9700, "/model"));
+    await until(() => f.offset() === "9701", "model menu accepted");
+    await until(
+      () =>
+        f.fake.calls.some(
+          (c) =>
+            c.method === "sendMessage" &&
+            String(c.payload.text).includes("Configuração de modelo"),
+        ),
+      "native menu sent",
+    );
+    const sent = f.fake.calls.find(
+      (c) =>
+        c.method === "sendMessage" &&
+        String(c.payload.text).includes("Configuração de modelo"),
+    )!;
+    const markup = sent.payload.reply_markup as {
+      inline_keyboard: { text: string; callback_data: string }[][];
+    };
+    const provider = markup.inline_keyboard
+      .flat()
+      .find((b) => /✓.*faux/.test(b.text))!;
+    assert.ok(provider);
+    f.fake.push({
+      update_id: 9701,
+      callback_query: {
+        id: "model-provider",
+        from: { id: 42 },
+        data: provider.callback_data,
+        message: {
+          message_id: 1,
+          date: 1,
+          from: { id: 123456 },
+          chat: { id: 42, type: "private" },
+        },
+      },
+    });
+    await until(
+      () => f.fake.calls.some((c) => c.method === "editMessageText"),
+      "same message edited",
+    );
+    const edit = f.fake.calls.find((c) => c.method === "editMessageText")!;
+    assert.equal(edit.payload.chat_id, "42");
+    assert.equal(edit.payload.message_id, 1);
+    assert.match(JSON.stringify(edit.payload.reply_markup), /faux-1/);
+    assert.match(
+      JSON.stringify(edit.payload.reply_markup),
+      /Voltar aos provedores/,
+    );
+    assert.deepEqual(f.app.settings.defaults(), defaults);
+    assert.equal(f.app.store.all("SELECT * FROM requests").length, 0);
+    assert.doesNotMatch(JSON.stringify(edit.payload), /fake_local_test_token/);
+  } finally {
+    await f.close();
+  }
+});
+
+test("managed polling receives topic service events and callback selections without moving the source topic", async () => {
+  const f = await fixture();
+  try {
+    const anchor = await f.app.create("Anchor");
+    await f.connect(anchor);
+    const source = dm(100, "/new Source");
+    source.message!.message_thread_id = 11;
+    const target = dm(101, "/new Target");
+    target.message!.message_thread_id = 22;
+    f.fake.push(source, target);
+    await until(() => f.offset() === "102");
+    const a = f.app.telegramChats.selection({
+      chat: "42",
+      user: "42",
+      messageThreadId: 11,
+    })!;
+    const b = f.app.telegramChats.selection({
+      chat: "42",
+      user: "42",
+      messageThreadId: 22,
+    })!;
+    const observed = dm(102, "");
+    delete observed.message!.text;
+    observed.message!.message_thread_id = 33;
+    observed.message!.forum_topic_created = { name: "Observed empty" };
+    const menu = dm(103, "/topics");
+    menu.message!.message_thread_id = 11;
+    f.fake.push(observed, menu);
+    await until(() => f.offset() === "104");
+    await until(() =>
+      f.fake.calls.some(
+        (c) =>
+          c.method === "sendMessage" &&
+          String(c.payload.text).includes("conhecidos"),
+      ),
+    );
+    const send = f.fake.calls
+      .filter((c) => c.method === "sendMessage")
+      .find((c) => String(c.payload.text).includes("conhecidos"))!;
+    assert.equal(send.payload.message_thread_id, 11);
+    const markup = send.payload.reply_markup as {
+      inline_keyboard: { text: string; callback_data: string }[][];
+    };
+    assert.ok(
+      markup.inline_keyboard
+        .flat()
+        .some((b) => b.text.includes("Observed empty")),
+    );
+    const choose = markup.inline_keyboard
+      .flat()
+      .find((b) => b.text.includes("Target"))!.callback_data;
+    f.fake.push({
+      update_id: 104,
+      callback_query: {
+        id: "managed-callback",
+        from: { id: 42 },
+        data: choose,
+        message: {
+          message_id: 500,
+          date: 1,
+          from: { id: f.fake.botId },
+          chat: { id: 42, type: "private" },
+          message_thread_id: 11,
+        },
+      },
+    });
+    await until(() => f.offset() === "105");
+    await until(() =>
+      f.fake.calls.some(
+        (c) =>
+          c.method === "sendMessage" &&
+          c.payload.message_thread_id === 22 &&
+          String(c.payload.text).includes("selecionada neste tópico"),
+      ),
+    );
+    assert.equal(
+      f.app.telegramChats.selection({
+        chat: "42",
+        user: "42",
+        messageThreadId: 11,
+      }),
+      a,
+    );
+    assert.equal(
+      f.app.telegramChats.selection({
+        chat: "42",
+        user: "42",
+        messageThreadId: 22,
+      }),
+      b,
+    );
+    assert.ok(
+      f.fake.calls.some(
+        (c) =>
+          c.method === "answerCallbackQuery" &&
+          c.payload.callback_query_id === "managed-callback",
+      ),
+    );
+    assert.ok(
+      f.fake.calls.some(
+        (c) =>
+          c.method === "sendMessage" &&
+          c.payload.message_thread_id === 22 &&
+          String(c.payload.text).includes("selecionada neste tópico"),
+      ),
+    );
+    assert.equal(f.app.store.all("SELECT * FROM requests").length, 0);
+  } finally {
+    await f.close();
+  }
+});

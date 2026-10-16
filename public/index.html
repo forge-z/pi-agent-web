@@ -1,0 +1,1585 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f5f8fc" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" />
+    <link
+      rel="preload"
+      href="/fonts/dm-sans-400-normal.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-400-normal.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <script src="/theme.js"></script>
+    <script defer src="/i18n-catalog.js"></script>
+    <script defer src="/i18n.js"></script>
+    <link rel="stylesheet" href="/style.css" />
+    <title>Pi · Assistente pessoal</title>
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <section id="login" class="login" aria-label="Entrar no Pi">
+      <div class="login-story">
+        <div class="brand brand-light">
+          <img
+            class="brand-icon"
+            src="/pi-logo.svg"
+            alt="Pi"
+            width="64"
+            height="64"
+          />
+        </div>
+        <div class="story-copy">
+          <p class="eyebrow">UM POUCO MAIS DE CLAREZA</p>
+          <h1>Suas ideias.<br />Seu ritmo.<br /><em>Seu espaço.</em></h1>
+          <p>
+            Um lugar para pensar, organizar e seguir em frente. Uma conversa que
+            acompanha você.
+          </p>
+        </div>
+        <div class="story-art" aria-hidden="true">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="art-mark">
+            <img src="/pi-logo.svg" alt="" width="240" height="240" />
+          </div>
+          <div class="art-note note-one">
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#chat-circle" /></svg
+            ><span>Uma ideia de cada vez.</span>
+          </div>
+          <div class="art-note note-two">
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#check-circle" /></svg
+            ><span>O próximo passo, mais claro.</span>
+          </div>
+        </div>
+        <div class="story-foot">
+          <span>WEB & TELEGRAM</span><span>A conversa continua.</span>
+        </div>
+      </div>
+      <div class="login-content">
+        <div class="login-top">
+          <span class="fine">Seu espaço pessoal</span>
+          <div class="login-preferences">
+            <div
+              class="palette-switch"
+              role="group"
+              aria-label="Paleta de cores"
+            >
+              <button
+                type="button"
+                data-palette-choice="blue"
+                aria-label="Paleta azul"
+                title="Paleta azul"
+                aria-pressed="true"
+              >
+                <span class="palette-swatch" aria-hidden="true"></span
+                >Azul</button
+              ><button
+                type="button"
+                data-palette-choice="gray"
+                aria-label="Paleta cinza"
+                title="Paleta cinza"
+                aria-pressed="false"
+              >
+                <span class="palette-swatch" aria-hidden="true"></span>Cinza
+              </button>
+              <button
+                type="button"
+                data-palette-choice="pi"
+                aria-label="Tema Pi"
+                title="Inspirado no site Pi Coding Agent"
+                aria-pressed="false"
+              >
+                <span class="palette-swatch" aria-hidden="true"></span>Pi
+              </button>
+            </div>
+            <div class="theme-switch" role="group" aria-label="Aparência">
+              <button
+                type="button"
+                data-theme-choice="light"
+                aria-label="Tema claro"
+                title="Tema claro"
+                aria-pressed="false"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#sun" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-theme-choice="dark"
+                aria-label="Tema escuro"
+                title="Tema escuro"
+                aria-pressed="false"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#moon" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-theme-choice="auto"
+                aria-label="Tema automático"
+                title="Automático: acompanhar o sistema"
+                aria-pressed="true"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#monitor" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="login-card">
+          <img
+            class="login-mark"
+            src="/pi-logo.svg"
+            alt="Pi"
+            width="80"
+            height="80"
+          />
+          <p class="eyebrow">BEM-VINDO AO PI</p>
+          <h2>Bom ter você<br /><em>por aqui.</em></h2>
+          <p class="muted">
+            Entre para retomar suas conversas e abrir espaço para novas ideias.
+          </p>
+          <form id="login-form">
+            <label for="password">Senha do seu espaço</label>
+            <div class="password-field">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#key" /></svg
+              ><input
+                id="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Digite sua senha"
+                aria-describedby="login-error"
+                required
+                minlength="12"
+              />
+            </div>
+            <button id="login-submit" type="submit">
+              Entrar no meu espaço
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#arrow-right" />
+              </svg>
+            </button>
+          </form>
+          <p id="login-error" class="error" role="alert"></p>
+          <div class="login-note">
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#shield-check" />
+            </svg>
+            <p>
+              Este acesso é pessoal. A conexão com sua conta ChatGPT acontece
+              dentro do Pi.
+            </p>
+          </div>
+        </div>
+        <p class="login-footer">
+          Menos pontas soltas. Mais espaço para o que importa.
+        </p>
+      </div>
+    </section>
+    <div id="workspace" class="workspace" hidden>
+      <a class="skip-link" href="#message">Ir para a mensagem</a>
+      <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+      <aside id="sidebar" class="sidebar" aria-label="Seu espaço">
+        <div class="brand">
+          <img
+            class="brand-icon"
+            src="/pi-logo.svg"
+            alt="Pi"
+            width="64"
+            height="64"
+          />
+          <button
+            id="close-sidebar"
+            class="icon-button mobile-only"
+            aria-label="Fechar menu"
+          >
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#x" />
+            </svg>
+          </button>
+        </div>
+        <button id="new-conversation" class="new">
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#plus" /></svg
+          >Nova conversa<svg class="icon new-arrow" aria-hidden="true">
+            <use href="/icons.svg#arrow-up-right" />
+          </svg>
+        </button>
+        <label class="search-field" for="search-conversations"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#magnifying-glass" /></svg
+          ><input
+            id="search-conversations"
+            type="search"
+            placeholder="Buscar conversas"
+            autocomplete="off"
+          /><span class="sr-only">Buscar conversas</span></label
+        >
+        <div class="section-label">
+          <span id="conversation-list-heading">SUAS CONVERSAS</span
+          ><span id="conversation-count"></span>
+        </div>
+        <button
+          id="toggle-deleted-conversations"
+          class="subtle sidebar-view-toggle"
+          type="button"
+          aria-pressed="false"
+        >
+          Conversas excluídas
+        </button>
+        <nav id="conversations" aria-label="Conversas"></nav>
+        <p id="search-empty" class="search-empty" hidden>
+          Nenhuma conversa encontrada.
+        </p>
+        <div class="sidebar-bottom">
+          <nav class="space-navigation" aria-label="Gerenciar espaço">
+            <button id="tasks-button" type="button">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#calendar-blank" /></svg
+              ><span>Tarefas</span
+              ><svg class="icon nav-arrow" aria-hidden="true">
+                <use href="/icons.svg#caret-right" />
+              </svg>
+            </button>
+            <button id="settings-button" type="button">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#asterisk" /></svg
+              ><span>Configurações</span
+              ><svg class="icon nav-arrow" aria-hidden="true">
+                <use href="/icons.svg#caret-right" />
+              </svg>
+            </button>
+          </nav>
+
+          <div class="profile-row">
+            <span class="profile-avatar" aria-hidden="true">P</span>
+            <div><strong>Meu espaço</strong><span>Pessoal</span></div>
+            <button
+              id="logout"
+              class="icon-button"
+              aria-label="Sair"
+              title="Sair"
+            >
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#sign-out" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+      <main id="main">
+        <header class="workspace-header">
+          <button
+            id="open-sidebar"
+            class="icon-button mobile-only"
+            aria-label="Abrir menu"
+            aria-controls="sidebar"
+            aria-expanded="false"
+          >
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#list" />
+            </svg>
+          </button>
+          <div class="header-title">
+            <p class="eyebrow">SEU ESPAÇO</p>
+            <h1 id="conversation-title">Nova conversa</h1>
+          </div>
+          <div class="header-actions">
+            <span
+              id="connection"
+              class="connection"
+              role="status"
+              data-state="connecting"
+              >Conectando</span
+            ><span class="header-divider" aria-hidden="true"></span
+            ><button
+              id="tool-visibility-button"
+              class="subtle"
+              aria-label="Mostrar chamadas de ferramentas"
+              aria-pressed="true"
+              aria-controls="messages"
+              type="button"
+            >
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#plug" /></svg
+              ><span>Ferramentas</span>
+            </button>
+            <button
+              id="telegram-button"
+              class="subtle"
+              aria-label="Configurar Telegram"
+              type="button"
+            >
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#telegram-logo" /></svg
+              ><span>Telegram</span>
+            </button>
+          </div>
+        </header>
+        <div id="banner" class="banner" role="status"></div>
+        <div id="error" class="error notice" role="alert"></div>
+        <div id="main-content" class="main-content is-empty">
+          <div class="conversation-body">
+            <section
+              id="welcome"
+              class="welcome"
+              aria-labelledby="welcome-title"
+            >
+              <img
+                class="welcome-mark"
+                src="/pi-logo.svg"
+                alt=""
+                width="96"
+                height="96"
+              />
+              <p class="eyebrow">SEU DIA, COM MAIS CLAREZA</p>
+              <h2 id="welcome-title">
+                O que vamos<br /><em>resolver hoje?</em>
+              </h2>
+              <p>
+                Uma ideia, um plano ou aquela tarefa pendente.<br
+                  class="desktop-break"
+                />
+                Vamos encontrar o próximo passo.
+              </p>
+            </section>
+            <section
+              id="messages"
+              class="messages"
+              aria-label="Histórico de mensagens"
+            ></section>
+            <h2 id="human-controls-notice" class="card-meta" hidden>
+              Controles humanos necessários
+            </h2>
+            <section
+              id="actions"
+              class="actions"
+              aria-labelledby="human-controls-notice"
+            ></section>
+            <section
+              id="deliveries"
+              class="deliveries"
+              aria-label="Entregas Telegram"
+            ></section>
+          </div>
+          <footer class="composer-area">
+            <p id="conversation-readonly" role="status" hidden>
+              Somente leitura · continue no Telegram
+            </p>
+            <form id="message-form">
+              <label for="message" class="sr-only">Sua mensagem</label
+              ><textarea
+                id="message"
+                rows="2"
+                placeholder="Conte ao Pi o que está na sua cabeça…"
+                required
+                maxlength="32000"
+                aria-describedby="composer-hint composer-shortcuts"
+              ></textarea>
+              <div
+                id="command-suggestions"
+                class="command-suggestions"
+                role="listbox"
+                aria-label="Comandos do Pi"
+                hidden
+              ></div>
+              <div class="composer-toolbar">
+                <span class="composer-identity"
+                  ><img
+                    src="/pi-logo.svg"
+                    alt=""
+                    width="30"
+                    height="30"
+                  />Pi<button
+                    id="model-label"
+                    type="button"
+                    aria-haspopup="dialog"
+                    title="Modelo e esforço desta conversa"
+                  >
+                    Assistente pessoal
+                  </button></span
+                ><span id="composer-shortcuts" class="send-shortcut"
+                  >Enter envia · Ctrl + Enter nova linha</span
+                ><button
+                  id="send"
+                  type="submit"
+                  aria-label="Enviar mensagem"
+                  title="Enviar mensagem (Enter)"
+                  aria-keyshortcuts="Enter Meta+Enter"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#arrow-up" />
+                  </svg>
+                </button>
+              </div>
+            </form>
+            <div
+              id="suggestions"
+              class="suggestions"
+              aria-label="Ideias para começar"
+            >
+              <button
+                type="button"
+                data-prompt="Quero organizar meu dia. Me ajude a listar minhas tarefas e escolher por onde começar."
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#calendar-blank" /></svg
+                ><span
+                  >Organizar meu dia<small>Do caos às prioridades</small></span
+                ><svg class="icon suggestion-arrow" aria-hidden="true">
+                  <use href="/icons.svg#arrow-up-right" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-prompt="Tenho uma ideia e quero transformá-la em um plano. Me ajude a pensar nos primeiros passos."
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#lightbulb" /></svg
+                ><span
+                  >Desenvolver uma ideia<small
+                    >Dar forma ao próximo passo</small
+                  ></span
+                ><svg class="icon suggestion-arrow" aria-hidden="true">
+                  <use href="/icons.svg#arrow-up-right" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-prompt="Quero escrever uma mensagem com mais clareza. Me ajude a organizar o que preciso dizer."
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#pencil-simple-line" /></svg
+                ><span
+                  >Encontrar as palavras<small
+                    >Escrever com mais clareza</small
+                  ></span
+                ><svg class="icon suggestion-arrow" aria-hidden="true">
+                  <use href="/icons.svg#arrow-up-right" />
+                </svg>
+              </button>
+            </div>
+            <div class="composer-meta">
+              <span id="run-status" role="status">Conversa salva</span
+              ><span id="composer-hint"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#shield-check" /></svg
+                >Seu histórico, sempre à mão.</span
+              >
+            </div>
+          </footer>
+        </div>
+      </main>
+    </div>
+    <dialog
+      id="conversation-management-dialog"
+      class="management-dialog conversation-management-dialog"
+      aria-labelledby="conversation-management-title"
+    >
+      <form method="dialog">
+        <button
+          class="dialog-close icon-button"
+          id="conversation-management-close"
+          aria-label="Fechar gerenciamento da conversa"
+        >
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x" /></svg>
+        </button>
+      </form>
+      <p class="eyebrow">GERENCIAR CONVERSA</p>
+      <h2 id="conversation-management-title">Renomear conversa</h2>
+      <p id="conversation-management-intro" class="management-intro">
+        Escolha um título de até 100 caracteres.
+      </p>
+      <form id="conversation-management-form" class="management-form">
+        <div id="conversation-management-rename-fields" class="form-field">
+          <label for="conversation-management-name">Título</label>
+          <input
+            id="conversation-management-name"
+            type="text"
+            maxlength="100"
+            required
+            autocomplete="off"
+          />
+        </div>
+        <div id="conversation-management-delete-fields" hidden>
+          <p id="conversation-management-deadline"></p>
+          <p id="conversation-management-delete-notice">
+            Você poderá restaurar a conversa durante 7 dias. Depois desse prazo,
+            ela será excluída definitivamente. A restauração não reativa tarefas
+            nem vincula o Telegram.
+          </p>
+          <label
+            class="checkbox-line"
+            for="conversation-management-confirm-delete"
+          >
+            <input
+              id="conversation-management-confirm-delete"
+              type="checkbox"
+              required
+            />
+            <span id="conversation-management-delete-acknowledgement"
+              >Entendo as consequências e quero excluir esta conversa.</span
+            >
+          </label>
+        </div>
+        <p
+          id="conversation-management-error"
+          class="error"
+          role="alert"
+          tabindex="-1"
+        ></p>
+        <div class="form-actions">
+          <button id="conversation-management-submit" type="submit">
+            Salvar título
+          </button>
+          <button
+            id="conversation-management-cancel"
+            type="button"
+            class="subtle"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
+      id="settings-dialog"
+      class="management-dialog"
+      aria-labelledby="settings-title"
+    >
+      <form method="dialog" class="settings-dismiss">
+        <button
+          class="dialog-close icon-button"
+          aria-label="Fechar configurações"
+        >
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x" /></svg>
+        </button>
+      </form>
+      <p class="eyebrow">DO SEU JEITO</p>
+      <h2 id="settings-title">Seu espaço, ajustado.</h2>
+      <p class="management-intro">
+        Gerencie conexões, modelos e aparência do seu espaço.
+      </p>
+      <p id="settings-error" class="error" role="alert"></p>
+      <p id="settings-feedback" class="form-feedback" role="status"></p>
+      <section class="management-section" aria-labelledby="connections-title">
+        <div class="section-heading">
+          <span class="section-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#plug" /></svg
+          ></span>
+          <div>
+            <h3 id="connections-title">Conexões</h3>
+            <p>Escolha como acessar os modelos de cada provedor.</p>
+          </div>
+        </div>
+        <fieldset id="provider-connections" class="connection-fields" disabled>
+          <legend class="sr-only">Conexões dos provedores</legend>
+          <article class="management-card provider-card">
+            <div class="provider-card-heading">
+              <h4>OpenAI</h4>
+              <span id="provider-status" class="connection-status" role="status"
+                >Verificando conexão</span
+              >
+            </div>
+            <div class="form-field">
+              <label for="openai-auth-method">Autenticação</label>
+              <select id="openai-auth-method">
+                <option value="oauth">Conta ChatGPT</option>
+                <option value="api_key">Chave API OpenAI</option>
+              </select>
+            </div>
+            <button id="provider-button" class="provider-button">
+              <span class="provider-icon"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#plug" /></svg></span
+              ><span><span class="provider-label">Conectar ChatGPT</span></span
+              ><svg class="icon provider-arrow" aria-hidden="true">
+                <use href="/icons.svg#arrow-up-right" />
+              </svg>
+            </button>
+            <form
+              id="openai-api-form"
+              class="management-form api-key-form"
+              autocomplete="off"
+              hidden
+            >
+              <div class="form-field">
+                <label for="openai-api-key">Chave API OpenAI</label
+                ><input
+                  id="openai-api-key"
+                  type="password"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  required
+                  aria-describedby="openai-api-hint"
+                /><small id="openai-api-hint"
+                  >O uso da API é cobrado pelo provedor. A chave salva fica no
+                  servidor e não é exibida aqui.</small
+                >
+              </div>
+              <div class="form-actions">
+                <button id="openai-api-save" type="submit">
+                  Salvar chave API
+                </button>
+              </div>
+            </form>
+            <label
+              id="openai-replace-row"
+              class="checkbox-line credential-replacement"
+              hidden
+              ><input
+                id="openai-replace"
+                type="checkbox"
+                form="openai-api-form"
+              /><span id="openai-replace-label"
+                >Confirmo substituir a credencial OpenAI atual.</span
+              ></label
+            >
+            <p id="openai-connection-error" class="error" role="alert"></p>
+            <p
+              id="openai-connection-feedback"
+              class="form-feedback"
+              role="status"
+            ></p>
+          </article>
+          <article class="management-card provider-card">
+            <div class="provider-card-heading">
+              <h4>Anthropic · Claude</h4>
+              <span
+                id="anthropic-status"
+                class="connection-status"
+                role="status"
+                >Verificando conexão</span
+              >
+            </div>
+            <form
+              id="anthropic-api-form"
+              class="management-form api-key-form"
+              autocomplete="off"
+            >
+              <div class="form-field">
+                <label for="anthropic-api-key">Chave API Anthropic</label
+                ><input
+                  id="anthropic-api-key"
+                  type="password"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  required
+                  aria-describedby="anthropic-api-hint"
+                /><small id="anthropic-api-hint"
+                  >Use uma chave API do Anthropic Console. O uso da API é
+                  cobrado pelo provedor; a chave salva não é exibida
+                  aqui.</small
+                >
+              </div>
+              <label
+                id="anthropic-replace-row"
+                class="checkbox-line credential-replacement"
+                hidden
+                ><input id="anthropic-replace" type="checkbox" />Confirmo
+                substituir a chave API Anthropic atual.</label
+              >
+              <div class="form-actions">
+                <button id="anthropic-api-save" type="submit">
+                  Salvar chave API
+                </button>
+              </div>
+            </form>
+            <p id="anthropic-connection-error" class="error" role="alert"></p>
+            <p
+              id="anthropic-connection-feedback"
+              class="form-feedback"
+              role="status"
+            ></p>
+          </article>
+          <article class="management-card provider-card">
+            <div class="provider-card-heading">
+              <h4>DeepSeek</h4>
+              <span id="deepseek-status" class="connection-status" role="status"
+                >Verificando conexão</span
+              >
+            </div>
+            <form
+              id="deepseek-api-form"
+              class="management-form api-key-form"
+              autocomplete="off"
+            >
+              <div class="form-field">
+                <label for="deepseek-api-key">Chave API DeepSeek</label
+                ><input
+                  id="deepseek-api-key"
+                  type="password"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  required
+                  aria-describedby="deepseek-api-hint"
+                /><small id="deepseek-api-hint"
+                  >Use uma chave API da plataforma DeepSeek. O uso da API é
+                  cobrado pelo provedor; a chave salva não é exibida
+                  aqui.</small
+                >
+              </div>
+              <label
+                id="deepseek-replace-row"
+                class="checkbox-line credential-replacement"
+                hidden
+                ><input id="deepseek-replace" type="checkbox" />Confirmo
+                substituir a chave API DeepSeek atual.</label
+              >
+              <div class="form-actions">
+                <button id="deepseek-api-save" type="submit">
+                  Salvar chave API
+                </button>
+              </div>
+            </form>
+            <p id="deepseek-connection-error" class="error" role="alert"></p>
+            <p
+              id="deepseek-connection-feedback"
+              class="form-feedback"
+              role="status"
+            ></p>
+          </article>
+          <article class="management-card provider-card custom-provider-card">
+            <div class="provider-card-heading">
+              <h4>API personalizada</h4>
+            </div>
+            <p class="custom-provider-intro">
+              Conecte um endpoint OpenAI compatível ou Anthropic Messages com um
+              modelo e uma chave API.
+            </p>
+            <form
+              id="custom-provider-form"
+              class="management-form"
+              autocomplete="off"
+            >
+              <fieldset
+                id="custom-provider-fields"
+                class="custom-provider-fields"
+                disabled
+              >
+                <div class="form-field">
+                  <label for="custom-provider-protocol">Protocolo API</label>
+                  <select id="custom-provider-protocol">
+                    <option value="openai-compatible">OpenAI compatível</option>
+                    <option value="anthropic">Anthropic Messages</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="custom-provider-endpoint">Endpoint</label>
+                  <input
+                    id="custom-provider-endpoint"
+                    type="url"
+                    required
+                    autocomplete="url"
+                    placeholder="https://api.example.com/v1"
+                  />
+                </div>
+                <div class="form-field">
+                  <label for="custom-provider-model">ID do modelo</label>
+                  <input
+                    id="custom-provider-model"
+                    type="text"
+                    required
+                    autocomplete="off"
+                    list="custom-provider-models"
+                    placeholder="Digite o ID do modelo"
+                    aria-describedby="custom-provider-model-hint"
+                  />
+                  <datalist id="custom-provider-models"></datalist>
+                  <small id="custom-provider-model-hint">
+                    Informe o ID do modelo. A busca é opcional e não altera o
+                    que você digitar.
+                  </small>
+                </div>
+                <div class="form-field">
+                  <label for="custom-provider-api-key">Chave API</label>
+                  <input
+                    id="custom-provider-api-key"
+                    type="password"
+                    autocomplete="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    aria-describedby="custom-provider-key-hint"
+                  />
+                  <small id="custom-provider-key-hint">
+                    A chave é salva no servidor e nunca será exibida aqui. Pode
+                    ficar vazia para um endpoint local autorizado.
+                  </small>
+                </div>
+                <label
+                  class="checkbox-line custom-provider-local"
+                  for="custom-provider-allow-local"
+                >
+                  <input id="custom-provider-allow-local" type="checkbox" />
+                  <span>Permitir endpoint na minha rede local</span>
+                </label>
+                <small class="custom-provider-local-hint">
+                  Ative só para um servidor local confiável. Endpoints públicos
+                  devem usar HTTPS.
+                </small>
+                <div class="form-actions">
+                  <button
+                    id="custom-provider-fetch-models"
+                    type="button"
+                    class="subtle"
+                  >
+                    Buscar modelos
+                  </button>
+                  <button id="custom-provider-save" type="submit">
+                    Salvar conexão
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+            <p
+              id="custom-provider-status"
+              class="form-feedback custom-provider-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <div class="custom-provider-saved-list">
+              <h5>Suas conexões personalizadas</h5>
+              <div
+                id="custom-provider-list"
+                class="management-list"
+                aria-live="polite"
+              ></div>
+            </div>
+          </article>
+        </fieldset>
+      </section>
+      <section class="management-section" aria-labelledby="defaults-title">
+        <div class="section-heading">
+          <span class="section-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#lightbulb" /></svg
+          ></span>
+          <div>
+            <h3 id="defaults-title">Novas conversas</h3>
+            <p>
+              Escolha o provedor, o modelo e o esforço para novas conversas web
+              e Telegram. Conversas existentes mantêm suas escolhas.
+            </p>
+          </div>
+        </div>
+        <form id="defaults-form" class="management-form">
+          <div class="form-field">
+            <label for="default-provider">Provedor</label
+            ><select id="default-provider" required></select>
+          </div>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="default-model">Modelo</label
+              ><select id="default-model" required></select>
+            </div>
+            <div class="form-field">
+              <label for="default-effort">Esforço de raciocínio</label
+              ><select id="default-effort" required></select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit">Salvar padrão</button>
+          </div>
+        </form>
+      </section>
+      <section class="management-section" aria-labelledby="appearance-title">
+        <div class="section-heading">
+          <span class="section-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#sun" /></svg
+          ></span>
+          <div>
+            <h3 id="appearance-title">Aparência e idioma</h3>
+            <p>Ajustes deste navegador para deixar o espaço do seu jeito.</p>
+          </div>
+        </div>
+        <div class="settings-appearance">
+          <div class="palette-row">
+            <span>Paleta</span>
+            <div
+              class="palette-switch"
+              role="group"
+              aria-label="Paleta de cores"
+            >
+              <button
+                type="button"
+                data-palette-choice="blue"
+                aria-label="Paleta azul"
+                title="Paleta azul"
+                aria-pressed="true"
+              >
+                <span class="palette-swatch" aria-hidden="true"></span
+                >Azul</button
+              ><button
+                type="button"
+                data-palette-choice="gray"
+                aria-label="Paleta cinza"
+                title="Paleta cinza"
+                aria-pressed="false"
+              >
+                <span class="palette-swatch" aria-hidden="true"></span>Cinza
+              </button>
+              <button
+                type="button"
+                data-palette-choice="pi"
+                aria-label="Tema Pi"
+                title="Inspirado no site Pi Coding Agent"
+                aria-pressed="false"
+              >
+                <span class="palette-swatch" aria-hidden="true"></span>Pi
+              </button>
+            </div>
+          </div>
+          <div class="appearance-row">
+            <span>Aparência</span>
+            <div class="theme-switch" role="group" aria-label="Aparência">
+              <button
+                type="button"
+                data-theme-choice="light"
+                aria-label="Tema claro"
+                title="Tema claro"
+                aria-pressed="false"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#sun" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-theme-choice="dark"
+                aria-label="Tema escuro"
+                title="Tema escuro"
+                aria-pressed="false"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#moon" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-theme-choice="auto"
+                aria-label="Tema automático"
+                title="Automático: acompanhar o sistema"
+                aria-pressed="true"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#monitor" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="form-field language-preference">
+            <label for="interface-language">Idioma da interface</label>
+            <select id="interface-language">
+              <option value="pt-BR">Português (Brasil)</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+      </section>
+      <section class="management-section" aria-labelledby="app-info-title">
+        <h3 id="app-info-title">Sobre o app</h3>
+        <dl class="app-info">
+          <div>
+            <dt>Versão do app</dt>
+            <dd id="app-version">Desconhecido</dd>
+          </div>
+          <div>
+            <dt>Commit instalado</dt>
+            <dd id="app-commit">Desconhecido</dd>
+          </div>
+          <div>
+            <dt>Data de build</dt>
+            <dd id="app-built-at">Desconhecido</dd>
+          </div>
+        </dl>
+      </section>
+      <section class="management-section" aria-labelledby="mcp-title">
+        <div class="section-heading">
+          <span class="section-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#plug" /></svg
+          ></span>
+          <div>
+            <h3 id="mcp-title">Servidores MCP</h3>
+            <p>Conecte ferramentas por um endpoint HTTPS Streamable HTTP.</p>
+          </div>
+        </div>
+        <div class="permission-note">
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#shield-check" />
+          </svg>
+          <p>
+            Servidores novos usam chamadas diretas às ferramentas. Servidores
+            antigos continuam no modo de compatibilidade até você ativar a
+            integração automática.
+          </p>
+        </div>
+        <div id="mcp-list" class="management-list" aria-live="polite"></div>
+        <button id="mcp-add" type="button" class="subtle">
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#plus" /></svg
+          >Adicionar servidor
+        </button>
+        <form id="mcp-form" class="management-form editor-panel" hidden>
+          <h4 id="mcp-editor-title">Novo servidor</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="mcp-name">Nome</label
+              ><input
+                id="mcp-name"
+                required
+                maxlength="80"
+                pattern="[a-zA-Z0-9_-]+"
+                aria-describedby="mcp-name-hint"
+                placeholder="meu-servico"
+              /><small id="mcp-name-hint"
+                >Use letras sem acentos, números, hífen ou sublinhado. O nome
+                identifica este servidor e permanece fixo após salvar.</small
+              >
+            </div>
+            <div class="form-field">
+              <label for="mcp-url">Endpoint HTTPS</label
+              ><input
+                id="mcp-url"
+                type="url"
+                required
+                placeholder="https://servico.example/mcp"
+              />
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="mcp-token">Bearer token</label
+            ><input
+              id="mcp-token"
+              type="password"
+              autocomplete="new-password"
+              spellcheck="false"
+              aria-describedby="mcp-token-hint"
+            /><small id="mcp-token-hint"
+              >Opcional. O token salvo nunca é exibido aqui.</small
+            >
+          </div>
+          <label class="checkbox-line" id="mcp-remove-token-row" hidden
+            ><input id="mcp-remove-token" type="checkbox" />Remover token
+            salvo</label
+          >
+          <details id="mcp-token-file-details" class="advanced-fields" hidden>
+            <summary>Arquivo de token provisionado</summary>
+            <div class="form-field">
+              <label for="mcp-token-file">Caminho do arquivo</label
+              ><input
+                id="mcp-token-file"
+                readonly
+                autocomplete="off"
+                placeholder="/caminho/no/servidor/token"
+              /><small
+                >Este caminho foi configurado pelo operador do Pi. Para
+                alterá-lo, ajuste a configuração no servidor.</small
+              >
+            </div>
+          </details>
+          <div id="mcp-legacy-mode" class="form-field" hidden>
+            <p id="mcp-legacy-notice" class="card-meta">
+              Modo de compatibilidade. As listas de leitura e ação abaixo mantêm
+              as permissões atuais.
+            </p>
+            <label class="checkbox-line" for="mcp-use-direct">
+              <input id="mcp-use-direct" type="checkbox" />Usar integração
+              automática
+            </label>
+            <small>
+              Ao salvar, a união das ferramentas existentes será permitida no
+              modo direto. Chamadas diretas via execute podem ler e gravar
+              dados.
+            </small>
+          </div>
+          <div id="mcp-direct-mode" class="form-field" hidden>
+            <p id="mcp-direct-notice"></p>
+          </div>
+          <div class="form-field">
+            <label class="checkbox-line" for="mcp-cua-viewer">
+              <input id="mcp-cua-viewer" type="checkbox" />Permitir acesso
+              humano temporário ao desktop CUA
+            </label>
+            <small
+              >Usa a credencial existente desta conexão para criar um ticket
+              restrito de 30 minutos. O Pi pausa até a devolução explícita do
+              controle.</small
+            >
+          </div>
+          <details id="mcp-legacy-permissions" class="advanced-fields" hidden>
+            <summary>Ferramentas e permissões de compatibilidade</summary>
+            <div class="tool-permissions">
+              <div>
+                <h4>Ferramentas de leitura</h4>
+                <p>Podem consultar dados sem pedir aprovação.</p>
+                <div class="form-field">
+                  <label for="mcp-read-tools"
+                    >Nomes permitidos, um por linha</label
+                  ><textarea
+                    id="mcp-read-tools"
+                    rows="3"
+                    spellcheck="false"
+                    placeholder="search\nget_record"
+                  ></textarea>
+                </div>
+              </div>
+              <div>
+                <h4>Ferramentas de ação</h4>
+                <p>Cada execução precisa de aprovação.</p>
+                <div class="form-field">
+                  <label for="mcp-action-tools"
+                    >Nomes permitidos, um por linha</label
+                  ><textarea
+                    id="mcp-action-tools"
+                    rows="3"
+                    spellcheck="false"
+                    placeholder="create_record\nupdate_record"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+          </details>
+          <div class="discovery-heading">
+            <button id="mcp-discover" type="button" class="subtle">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#magnifying-glass" /></svg
+              >Atualizar ferramentas</button
+            ><small>O catálogo também é atualizado ao salvar.</small>
+          </div>
+          <div id="mcp-tools" class="discovered-tools"></div>
+          <p id="mcp-editor-error" class="error" role="alert"></p>
+          <p id="mcp-editor-feedback" class="form-feedback" role="status"></p>
+          <div class="form-actions">
+            <button type="submit">Salvar servidor</button
+            ><button id="mcp-cancel" type="button" class="subtle">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </section>
+    </dialog>
+    <dialog
+      id="conversation-settings-dialog"
+      aria-labelledby="conversation-settings-title"
+    >
+      <form method="dialog">
+        <button
+          class="dialog-close icon-button"
+          aria-label="Fechar ajustes da conversa"
+        >
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x" /></svg>
+        </button>
+      </form>
+      <span class="dialog-icon"
+        ><svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#lightbulb" /></svg
+      ></span>
+      <p class="eyebrow">ESTA CONVERSA</p>
+      <h2 id="conversation-settings-title">Um jeito de pensar.</h2>
+      <p>
+        Escolha o modelo e o esforço para esta conversa. Para mudar o padrão de
+        novas conversas, abra Configurações.
+      </p>
+      <form id="conversation-settings-form" class="management-form">
+        <div class="form-field">
+          <label for="conversation-provider">Provedor</label
+          ><select id="conversation-provider" required></select>
+        </div>
+        <div class="form-field">
+          <label for="conversation-model">Modelo</label
+          ><select id="conversation-model" required></select>
+        </div>
+        <div class="form-field">
+          <label for="conversation-effort">Esforço de raciocínio</label
+          ><select id="conversation-effort" required></select>
+        </div>
+        <p id="conversation-settings-error" class="error" role="alert"></p>
+        <div class="form-actions">
+          <button type="submit">Aplicar à conversa</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
+      id="tasks-dialog"
+      class="management-dialog"
+      aria-labelledby="tasks-title"
+    >
+      <form method="dialog">
+        <button class="dialog-close icon-button" aria-label="Fechar tarefas">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x" /></svg>
+        </button>
+      </form>
+      <p class="eyebrow">UM PRÓXIMO PASSO, NO TEMPO CERTO</p>
+      <h2 id="tasks-title">Deixe combinado.</h2>
+      <p class="management-intro">
+        Agende um pedido para o Pi executar na conversa que você escolher.
+      </p>
+      <div class="permission-note">
+        <svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#shield-check" />
+        </svg>
+        <p>
+          Todo resultado permanece na conversa web. Escolha se quer também uma
+          cópia no Telegram; a conversa precisa ter um vínculo autorizado. As
+          permissões das ferramentas também se aplicam às tarefas.
+        </p>
+      </div>
+      <p id="tasks-error" class="error" role="alert"></p>
+      <p id="tasks-feedback" class="form-feedback" role="status"></p>
+      <div class="list-heading">
+        <h3>Suas tarefas</h3>
+        <button id="tasks-refresh" type="button" class="subtle">
+          Atualizar
+        </button>
+      </div>
+      <div id="tasks-list" class="management-list" aria-live="polite"></div>
+      <section class="management-section" aria-labelledby="task-create-title">
+        <div class="section-heading">
+          <span class="section-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#plus" /></svg
+          ></span>
+          <div>
+            <h3 id="task-create-title">Nova tarefa</h3>
+            <p>Um pedido claro, uma conversa e um horário.</p>
+          </div>
+        </div>
+        <form id="task-form" class="management-form">
+          <div class="form-field">
+            <label for="task-title">Título</label
+            ><input
+              id="task-title"
+              required
+              maxlength="160"
+              placeholder="Resumo da semana"
+            />
+          </div>
+          <div class="form-field">
+            <label for="task-prompt">O que o Pi deve fazer?</label
+            ><textarea
+              id="task-prompt"
+              required
+              maxlength="32000"
+              rows="3"
+              placeholder="Resuma o que conversamos nesta semana e liste as próximas prioridades."
+            ></textarea>
+          </div>
+          <div class="form-field">
+            <label for="task-conversation">Conversa</label
+            ><select id="task-conversation" required></select>
+          </div>
+          <div class="form-field">
+            <label for="task-delivery">Destino do resultado</label
+            ><select id="task-delivery" aria-describedby="task-delivery-hint">
+              <option value="web">Somente nesta conversa web</option>
+              <option value="web_telegram">Conversa web e Telegram</option>
+            </select>
+            <small id="task-delivery-hint" aria-live="polite"
+              >Todo resultado fica na conversa web. O Telegram recebe uma cópia
+              quando esta conversa está vinculada e autorizada.</small
+            >
+          </div>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="task-kind">Quando executar</label
+              ><select id="task-kind">
+                <option value="once">Uma vez</option>
+                <option value="cron">Repetir</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="task-timezone">Fuso horário</label
+              ><input
+                id="task-timezone"
+                required
+                value="America/Sao_Paulo"
+                aria-describedby="task-timezone-hint"
+              /><small id="task-timezone-hint"
+                >Use um fuso IANA, como America/Sao_Paulo.</small
+              >
+            </div>
+          </div>
+          <div id="task-once-field" class="form-field">
+            <label for="task-once">Data e horário</label
+            ><input id="task-once" type="datetime-local" required /><small
+              >O horário será interpretado no fuso escolhido acima.</small
+            >
+          </div>
+          <div id="task-cron-field" class="form-field" hidden>
+            <label for="task-cron">Agendamento cron</label
+            ><input
+              id="task-cron"
+              placeholder="0 9 * * 1-5"
+              spellcheck="false"
+              aria-describedby="task-cron-hint"
+            /><small id="task-cron-hint"
+              >Cinco campos: minuto, hora, dia do mês, mês e dia da semana.
+              Exemplo: 0 9 * * 1-5 = dias úteis às 9h.</small
+            >
+          </div>
+          <p id="task-form-error" class="error" role="alert"></p>
+          <div class="form-actions">
+            <button type="submit">Criar tarefa</button>
+          </div>
+        </form>
+      </section>
+    </dialog>
+    <dialog
+      id="command-results-dialog"
+      class="command-results-dialog"
+      aria-labelledby="command-results-title"
+    >
+      <form method="dialog">
+        <button class="dialog-close icon-button" aria-label="Fechar">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x" /></svg>
+        </button>
+      </form>
+      <span class="dialog-icon" id="command-results-icon"
+        ><svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#asterisk" /></svg
+      ></span>
+      <p class="eyebrow" id="command-results-eyebrow"></p>
+      <h2 id="command-results-title"></h2>
+      <p id="command-results-intro" class="command-results-intro"></p>
+      <div id="command-results-body" class="command-results-body"></div>
+    </dialog>
+    <dialog
+      id="command-tasks-dialog"
+      class="command-tasks-dialog"
+      aria-labelledby="command-tasks-title"
+    >
+      <form method="dialog">
+        <button class="dialog-close icon-button" aria-label="Fechar tarefas">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x" /></svg>
+        </button>
+      </form>
+      <span class="dialog-icon"
+        ><svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#list" /></svg
+      ></span>
+      <p class="eyebrow">ATIVIDADE ATUAL</p>
+      <h2 id="command-tasks-title">Tarefas em andamento.</h2>
+      <p class="command-results-intro">
+        Acompanhe as execuções ativas nas suas conversas.
+      </p>
+      <div class="command-tasks-toolbar">
+        <span id="command-tasks-updated" class="fine"></span>
+        <button id="command-tasks-refresh" type="button" class="subtle">
+          Atualizar
+        </button>
+      </div>
+      <p id="command-tasks-error" class="error" role="alert"></p>
+      <div
+        id="command-tasks-list"
+        class="command-tasks-list"
+        aria-live="polite"
+      ></div>
+    </dialog>
+    <dialog
+      id="telegram-dialog"
+      class="telegram-dialog"
+      aria-labelledby="telegram-title"
+    >
+      <form method="dialog">
+        <button
+          class="dialog-close icon-button"
+          aria-label="Fechar"
+          type="submit"
+        >
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x" /></svg>
+        </button>
+      </form>
+      <span class="dialog-icon"
+        ><svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#telegram-logo" /></svg
+      ></span>
+      <p class="eyebrow">CONEXÃO DIRETA</p>
+      <h2 id="telegram-title">Telegram</h2>
+      <p class="telegram-intro">
+        Configure o bot e escolha o usuário autorizado. As mensagens usam
+        conversas iniciadas no Telegram, que podem continuar na web. O histórico
+        antigo permanece separado.
+      </p>
+
+      <section class="telegram-overview" aria-label="Estado da conexão">
+        <div class="telegram-status-line">
+          <span
+            id="telegram-state"
+            class="telegram-state"
+            data-state="unconfigured"
+            >Verificando</span
+          >
+          <span id="telegram-bot" class="fine">Bot não identificado</span>
+        </div>
+        <p
+          id="telegram-status-message"
+          class="telegram-status-message"
+          role="status"
+          aria-live="polite"
+        ></p>
+        <p id="telegram-last-success" class="fine telegram-last-success"></p>
+        <p
+          id="telegram-command-menu-status"
+          class="fine telegram-command-menu-status"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+        <p
+          id="telegram-first-message"
+          class="telegram-first-message"
+          role="status"
+          hidden
+        ></p>
+        <div id="telegram-linked" class="telegram-linked" hidden>
+          <span class="fine">Destino configurado</span>
+          <strong id="telegram-linked-title"></strong>
+          <code id="telegram-linked-id"></code>
+        </div>
+        <div class="telegram-target">
+          <span class="fine">Destino desta conexão</span>
+          <strong id="telegram-target-title">Conversa atual</strong>
+          <code id="telegram-target-id"></code>
+        </div>
+      </section>
+
+      <form id="telegram-form" class="telegram-form">
+        <div class="telegram-field">
+          <label for="telegram-token">Token do bot</label>
+          <input
+            id="telegram-token"
+            type="password"
+            inputmode="text"
+            autocomplete="new-password"
+            autocapitalize="off"
+            spellcheck="false"
+            placeholder="Cole o token do bot"
+            aria-describedby="telegram-token-hint"
+            required
+          />
+          <p id="telegram-token-hint" class="fine">
+            O token salvo nunca é exibido. Se já houver um token configurado,
+            deixe este campo em branco para mantê-lo.
+          </p>
+        </div>
+        <div class="telegram-field">
+          <label for="telegram-user-id"
+            >ID numérico do usuário autorizado</label
+          >
+          <input
+            id="telegram-user-id"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            pattern="[0-9]+"
+            placeholder="Ex.: 123456789"
+            aria-describedby="telegram-user-hint"
+            required
+          />
+          <p id="telegram-user-hint" class="fine">
+            Aceita apenas os dígitos do seu ID do Telegram.
+          </p>
+        </div>
+        <p
+          id="telegram-form-error"
+          class="error telegram-form-error"
+          role="alert"
+        ></p>
+        <div class="telegram-actions">
+          <button id="telegram-connect" type="submit">Conectar</button>
+          <button id="telegram-disconnect" type="button" class="subtle" hidden>
+            Desconectar
+          </button>
+          <a
+            id="telegram-open-bot"
+            class="subtle telegram-open-bot"
+            hidden
+            target="_blank"
+            rel="noopener noreferrer"
+            >Abrir bot no Telegram</a
+          >
+        </div>
+        <div id="telegram-retry-actions" class="telegram-retry-actions" hidden>
+          <button id="telegram-retry" type="button">Tentar novamente</button>
+          <button id="telegram-refresh" type="button" class="subtle">
+            Atualizar status
+          </button>
+        </div>
+      </form>
+
+      <section
+        id="telegram-conflict"
+        class="telegram-conflict"
+        aria-labelledby="telegram-conflict-title"
+        hidden
+      >
+        <p class="eyebrow">WEBHOOK JÁ CONFIGURADO</p>
+        <h3 id="telegram-conflict-title">
+          O bot está recebendo atualizações em outro endereço.
+        </h3>
+        <p id="telegram-conflict-bot" class="telegram-conflict-bot"></p>
+        <p class="fine">Endereço atual do webhook</p>
+        <code id="telegram-webhook-url" class="telegram-webhook-url"></code>
+        <p>
+          Trocar para polling remove esse webhook do Telegram. Essa alteração só
+          acontece quando você confirmar abaixo.
+        </p>
+        <div class="telegram-conflict-actions">
+          <button id="telegram-replace-webhook" type="button">
+            Trocar para polling
+          </button>
+          <button id="telegram-cancel-conflict" type="button" class="subtle">
+            Cancelar
+          </button>
+        </div>
+      </section>
+    </dialog>
+    <dialog id="provider-dialog" aria-labelledby="provider-title">
+      <span class="dialog-icon"
+        ><svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#plug" /></svg
+      ></span>
+      <p class="eyebrow">CONECTE SUA CONTA</p>
+      <h2 id="provider-title">Conectar ChatGPT</h2>
+      <p id="auth-state" role="status">Preparando login…</p>
+      <div id="auth-events"></div>
+      <form id="auth-form" hidden>
+        <label id="auth-label" for="auth-value"></label
+        ><input id="auth-value" autocomplete="off" required /><button
+          type="submit"
+        >
+          Continuar<svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#arrow-right" />
+          </svg>
+        </button>
+      </form>
+      <button id="cancel-auth" class="subtle">Fechar / cancelar</button>
+    </dialog>
+  </body>
+</html>

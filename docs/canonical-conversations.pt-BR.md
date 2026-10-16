@@ -1,0 +1,19 @@
+# Conversas canônicas na web e no Telegram
+
+> Historical design / desenho histórico: cross-channel continuation and mirroring are superseded by [channel separation / separação dos canais](channel-separation.md). Existing bindings and cron destinations remain intact.
+
+Um ID de conversa Pi Durable identifica o mesmo histórico nas duas interfaces. Quando o Telegram está conectado e o proprietário já tem autorização ativa, uma nova conversa web cria um tópico nativo com esse mesmo ID. O evento de criação de um tópico Telegram cria sua entrada web uma vez. Históricos existentes não são combinados por inferência.
+
+Inputs web recebem **Você · via web** apenas na apresentação Telegram; o texto humano salvo e enviado ao modelo permanece igual. Inputs web e respostas finais são espelhados no tópico autorizado capturado na admissão. Inputs Telegram já usam o histórico Durable dessa conversa. Trocar a conversa ativa web ou a seleção Telegram não muda respostas pendentes nem resultados de cron. Rota canônica ausente ou revogada gera erro; não há fallback para o Geral nem outra conversa selecionada.
+
+Um cron criado por solicitação humana numa conversa canônica com tópico Telegram usa web e Telegram por padrão em ambas as interfaces. O servidor ignora `delivery=web` vindo do modelo, salvo quando o pedido humano salvo escolhe explicitamente somente web ou proíbe claramente a entrega Telegram; escolhas ambíguas ou citadas exigem esclarecimento. A seleção direta no painel de tarefas continua prevalecendo. O servidor comprova a origem pelas submissões Durable ativas e pelo ledger de solicitações, então guarda conversa, request, bot, usuário, chat e tópico. Cada ocorrência admitida copia esses valores. Editar a tarefa afeta somente ocorrências futuras. Agendas antigas sem prova do destino pedem seleção explícita no painel; ocorrências antigas não são enviadas para um destino inferido depois.
+
+Cada conversa tem sua própria autorização. Arquivar a conversa antiga de pareamento não revoga outros tópicos. Arquivar/restaurar um tópico não recupera seu grant. Revogar ou mudar bot/chat/usuário/tópico bloqueia definitivamente o destino já capturado e cancela partes pendentes. Antes de cada envio, configuração do bot, allowlists, grant próprio e tópico exato são conferidos novamente. Um envio antigo incerto permanece disponível para resolução manual, mas não bloqueia entregas novas de outras conversas.
+
+Durante uma conexão Telegram transitória, a criação web guarda uma intenção pendente sem fazer um pedido externo de tópico. A conversa mostra o motivo e **Concluir tópico Telegram** para conclusão explícita usando seu ID existente, inclusive em clientes que a criaram sem request ID. A pendência sobrevive ao reinício e não é concluída automaticamente. Conversas web autorizadas existentes sem tópico podem usar a mesma ação; autorização revogada nunca é restaurada.
+
+A criação de tópico registra incerteza antes do pedido externo. Criação concorrente e evento de serviço compartilham o resultado; reinício ou resposta ambígua não repetem `createForumTopic` automaticamente. Confira uma criação ambígua antes de escolher outro destino. Esta alteração não modifica o BotFather nem habilita tópicos na conta.
+
+Respostas visíveis longas expandem na conversa com **Ver mais**. Cada pedido transporta no máximo 16.384 caracteres visíveis. Assinaturas do provider e raciocínio oculto são omitidos sem marcar uma resposta curta como truncada. O renderer Markdown conserva DOM inerte e seus limites de proteção; cada página expandida é limitada. Formatação Markdown dividida entre páginas pode aparecer como texto literal, mas todo o texto visível continua acessível.
+
+A validação usa SQLite descartável, respostas faux e API Telegram simulada. Não envolve dados de produção, credenciais, mensagens reais, merge ou deploy. Validação em cliente Telegram real e Safari/iOS permanece fora deste trabalho.

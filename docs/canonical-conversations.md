@@ -1,0 +1,19 @@
+# Canonical web and Telegram conversations
+
+> Historical design / desenho histórico: cross-channel continuation and mirroring are superseded by [channel separation / separação dos canais](channel-separation.md). Existing bindings and cron destinations remain intact.
+
+A Pi Durable conversation ID identifies one history on both interfaces. When Telegram is connected and the owner already has an active authorization, creating a web conversation creates a native Telegram topic for that same ID. A native topic creation event creates its web entry once. Existing historical conversations are not merged by inference.
+
+Web inputs are labeled **Você · via web** in their Telegram presentation only; saved human text and model input remain unchanged. Web inputs and final assistant replies mirror the exact authorized topic captured at admission. Telegram inputs already use that conversation's Durable history. Changing the active web conversation or Telegram selection does not move pending replies or cron results. A missing or revoked canonical route produces an error; there is no fallback to General or another selected conversation.
+
+A cron created by a human request in a canonical Telegram topic defaults to web plus Telegram from either interface. The server ignores a model-provided `delivery=web` unless the saved human request explicitly chooses web only or clearly prohibits Telegram delivery; ambiguous or quoted destination choices require clarification. Direct task-panel selections remain authoritative. The server proves origin using active Durable input submissions and its request ledger, then stores conversation, request, bot, user, chat and topic. Each admitted occurrence copies those values. Editing a task affects only future occurrences. Legacy schedules without destination proof require an explicit UI selection; old occurrences are never sent to a newly inferred destination.
+
+Each conversation has its own authorization. Archiving the legacy pairing conversation does not revoke other topics. Archiving/restoring a topic never restores its grant. Revocation or a bot/chat/user/topic change permanently blocks the already captured destination and cancels pending parts. Before each send the configured bot, allowlists, own grant and exact topic are checked again. An uncertain old send remains visible for manual reconciliation but does not block unrelated new deliveries.
+
+During a temporary Telegram connection, web creation saves a pending intent without making an external topic request. The conversation shows the reason and **Complete Telegram topic** for explicit completion using its existing ID, including clients that created it without a request ID. Pending completion survives restart and does not run automatically. Existing authorized web conversations without a topic can use the same action; revoked authorization is never restored.
+
+Topic creation records uncertainty before the external request. Concurrent creation and service events share the result; restart or an ambiguous response never blindly repeats `createForumTopic`. Verify ambiguous creation before choosing another destination. This change does not change BotFather or enable topics on an account.
+
+Long visible responses expand inline with **View more**. Each request carries at most 16,384 visible characters. Provider signatures and hidden reasoning are excluded without marking a short response truncated. Rendering uses the existing inert DOM Markdown implementation and its preflight limits; each expanded page is bounded. Markdown constructs crossing page boundaries may display as literal text, but the complete visible text remains accessible.
+
+Validation uses disposable SQLite, faux model responses and simulated Telegram APIs. No production data, credentials, real messages, merge or deployment are involved. Real Telegram client and Safari/iOS validation remain outside this task.

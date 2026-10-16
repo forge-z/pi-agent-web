@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Pi · Controles humanos</title>
+    <script src="/theme.js"></script>
+    <script defer src="/i18n-catalog.js"></script>
+    <script defer src="/i18n.js"></script>
+    <script type="module" src="/human-controls-page.js"></script>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="human-controls-page">
+    <main class="human-controls-shell">
+      <h1>Controles humanos necessários</h1>
+      <p>
+        Resolva apenas as solicitações abaixo. Continue a conversa no Telegram.
+      </p>
+      <label for="interface-language">Idioma da interface</label>
+      <select id="interface-language">
+        <option value="pt-BR">Português</option>
+        <option value="en">English</option>
+      </select>
+      <form id="human-login" class="management-form" hidden>
+        <label for="human-password">Senha da interface</label>
+        <input
+          id="human-password"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+        <button type="submit">Entrar</button>
+      </form>
+      <p id="human-error" class="form-error" role="alert"></p>
+      <section id="human-session" hidden>
+        <button id="human-refresh" type="button">Atualizar</button>
+        <button id="human-logout" type="button">Sair</button>
+        <p id="human-empty" hidden>Nenhum controle humano pendente.</p>
+        <div id="human-cards"></div>
+      </section>
+    </main>
+  </body>
+</html>

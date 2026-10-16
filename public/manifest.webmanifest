@@ -1,0 +1,16 @@
+{
+  "name": "Pi · Assistente pessoal",
+  "short_name": "Pi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f8fc",
+  "theme_color": "#315db9",
+  "icons": [
+    {
+      "src": "/pi-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
